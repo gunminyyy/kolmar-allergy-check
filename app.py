@@ -44,27 +44,30 @@ if src_file and res_file:
         src_data_map = {}
         res_data_map = {}
 
-        # --- A. 원본 데이터 수집 (선택된 모드에 따라 다름) ---
+        # --- A. 원본 데이터 수집 ---
         if mode == "CFF 양식":
-            # CFF 기준: 제품명 D7, 데이터 13~95행, CAS F열(6), 수치 L열(12), 이름 B열(2)
+            # CFF 기준: 제품명 D7, 날짜 N9, 데이터 13~95행, CAS F열(6), 수치 L열(12), 이름 B열(2)
             src_product = str(ws_src['D7'].value or "정보없음").strip()
+            src_date = str(ws_src['N9'].value or "날짜없음").split(' ')[0]
             for r in range(13, 96):
                 c_set = get_cas_set(ws_src.cell(row=r, column=6).value)
                 val = ws_src.cell(row=r, column=12).value
                 if c_set and val is not None and val != 0:
                     src_data_map[c_set] = {"name": ws_src.cell(row=r, column=2).value, "val": float(val)}
         else:
-            # HP 기준: 제품명 B10, 데이터 1~400행, CAS B열(2), 수치 C열(3), 이름 A열(1)
+            # HP 기준: 제품명 B10, 날짜 E10(최종본과 동일 위치 가정), 데이터 1~400행, CAS B열(2), 수치 C열(3), 이름 A열(1)
             src_product = str(ws_src['B10'].value or "정보없음").strip()
+            src_date = str(ws_src['E10'].value or "날짜없음").split(' ')[0]
             for r in range(1, 400):
                 c_set = get_cas_set(ws_src.cell(row=r, column=2).value)
                 val = ws_src.cell(row=r, column=3).value
                 if c_set and val is not None and val != 0:
                     src_data_map[c_set] = {"name": ws_src.cell(row=r, column=1).value, "val": float(val)}
 
-        # --- B. 최종본 데이터 수집 (고정 양식) ---
-        # 최종본 기준: 제품명 B10, CAS B열(2), 수치 C열(3), 이름 A열(1)
+        # --- B. 최종본 데이터 수집 ---
+        # 최종본 기준: 제품명 B10, 날짜 E10, CAS B열(2), 수치 C열(3), 이름 A열(1)
         res_product = str(ws_res['B10'].value or "정보없음").strip()
+        res_date = str(ws_res['E10'].value or "날짜없음").split(' ')[0]
         for r in range(1, 400):
             c_set = get_cas_set(ws_res.cell(row=r, column=2).value)
             val = ws_res.cell(row=r, column=3).value
@@ -76,7 +79,8 @@ if src_file and res_file:
         table_data = []
         match_count = 0
 
-        for c_set in sorted(list(all_cas_sets), key=lambda x: list(x)[0] if x else ""):
+        # 번호를 1부터 시작하게 하기 위해 enumerate(..., 1) 사용
+        for i, c_set in enumerate(sorted(list(all_cas_sets), key=lambda x: list(x)[0] if x else ""), 1):
             s_val = src_data_map.get(c_set, {}).get('val', "누락")
             r_val = res_data_map.get(c_set, {}).get('val', "누락")
             name = res_data_map.get(c_set, {}).get('name') or src_data_map.get(c_set, {}).get('name') or "Unknown"
@@ -85,6 +89,7 @@ if src_file and res_file:
             if is_match: match_count += 1
             
             table_data.append({
+                "번호": i,
                 "CAS 번호": ", ".join(list(c_set)),
                 "물질명": name,
                 "원본 수치": s_val,
@@ -96,11 +101,14 @@ if src_file and res_file:
         st.success(f"검증 완료 ({mode})")
         
         summ_col1, summ_col2 = st.columns(2)
-        summ_col1.info(f"**원본 제품명:** {src_product}")
-        summ_col2.info(f"**최종본 제품명:** {res_product}")
+        with summ_col1:
+            st.info(f"**원본 제품명:** {src_product}\n\n**원본 작성일:** {src_date}")
+        with summ_col2:
+            st.info(f"**최종본 제품명:** {res_product}\n\n**최종본 작성일:** {res_date}")
 
         df = pd.DataFrame(table_data)
-        st.dataframe(df, use_container_width=True)
+        # 인덱스(0, 1...)를 숨기고 '번호' 컬럼이 첫 번째로 오게 출력
+        st.dataframe(df, use_container_width=True, hide_index=True)
         
         mismatch_count = len(table_data) - match_count
         st.metric("검증 요약", f"총 {len(table_data)}건", f"불일치 {mismatch_count}건", delta_color="inverse")
