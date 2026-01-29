@@ -92,6 +92,10 @@ if src_file_list and res_file_list:
             yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
             rp_name, rp_date = str(ws_r['B10'].value or "N/A"), str(ws_r['E10'].value or "N/A").split(' ')[0]
             
+            # 파일명-제품명 일치 확인
+            src_name_check = check_name_match(src_f.name, p_name)
+            res_name_check = check_name_match(res_f.name, rp_name)
+
             r_map = {}
             mismatch_count = 0
             
@@ -116,10 +120,7 @@ if src_file_list and res_file_list:
                 else:
                     if curr_val is not None and curr_val != 0:
                         r_map[c_set] = {"n": ws_r.cell(row=r, column=1).value, "v": curr_val}
-                        mismatch_count += 1 # 원본에 없는데 양식에 값이 있는 경우도 불일치로 간주
-
-            src_name_check = check_name_match(src_f.name, p_name)
-            res_name_check = check_name_match(res_f.name, rp_name)
+                        mismatch_count += 1
 
             all_cas = set(s_map.keys()) | set(r_map.keys())
             rows = []
@@ -130,28 +131,24 @@ if src_file_list and res_file_list:
 
             out = io.BytesIO()
             wb_r.save(out)
-            # 불일치가 있을 때만 ZIP 리스트에 추가
             if mismatch_count > 0:
                 all_edited_files.append({"name": f"수정본_{res_f.name}", "data": out.getvalue()})
 
             # --- 결과 섹션 ---
             status_icon = "✅" if mismatch_count == 0 else "❌"
-            # (자동수정 -> 불일치) 멘트 수정
             expander_title = f"{status_icon} [{idx+1}번] {src_f.name} (불일치: {mismatch_count}건)"
             
             with st.expander(expander_title):
                 m1, m2 = st.columns(2)
-                # 줄바꿈 처리를 위해 \n 사용 및 가독성 개선
                 with m1: 
                     st.success(f"**원본 제품명:** \n{p_name} ({src_name_check})")
-                    st.write(f"**원본 작성일:** {p_date}")
+                    st.success(f"**원본 작성일:** \n{p_date}") # 디자인 통일 (검사 멘트 삭제)
                 with m2: 
                     st.info(f"**양식 제품명:** \n{rp_name} ({res_name_check})")
-                    st.write(f"**양식 작성일:** {rp_date}")
+                    st.info(f"**양식 작성일:** \n{rp_date}") # 디자인 통일 (검사 멘트 삭제)
                 
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
                 
-                # 불일치가 0건이 아닐 때만 개별 다운로드 버튼 표시
                 if mismatch_count > 0:
                     st.download_button(f"💾 {idx+1}번 수정본 엑셀 다운로드", out.getvalue(), f"Edited_{res_f.name}", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"btn_{idx}")
             
@@ -159,7 +156,6 @@ if src_file_list and res_file_list:
         except Exception as e:
             st.error(f"{idx+1}번 파일 처리 중 오류: {e}")
 
-    # 일괄 다운로드 버튼도 수정본이 있을 때만 표시
     if all_edited_files:
         st.markdown("---")
         zip_buf = io.BytesIO()
