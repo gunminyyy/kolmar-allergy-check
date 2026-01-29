@@ -128,8 +128,6 @@ if src_file_list and res_file_list:
         st.warning("⚠️ 원본과 양식의 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
-
-
-else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
+
 
