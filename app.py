@@ -46,8 +46,8 @@ with col1:
             src_file_list.append(next(f for f in uploaded_src_files if f.name == orig))
 
 with col2:
-    st.subheader("2. 최종본(Result) 파일 목록")
-    uploaded_res_files = st.file_uploader("최종본 선택 (다중 가능)", type=["xlsx"], accept_multiple_files=True, key="res_upload")
+    st.subheader("2. 양식(Result) 파일 목록")
+    uploaded_res_files = st.file_uploader("양식 선택 (다중 가능)", type=["xlsx"], accept_multiple_files=True, key="res_upload")
     res_file_list = []
     if uploaded_res_files:
         file_display_names_res = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded_res_files)]
@@ -105,7 +105,7 @@ if src_file_list and res_file_list:
                 sv, rv = s_map.get(c, {}).get('v', "누락"), r_map.get(c, {}).get('v', "누락")
                 match = (sv != "누락" and rv != "누락" and abs(sv - rv) < 0.0001)
                 if not match: mismatch += 1
-                rows.append({"번호": i, "CAS": ", ".join(list(c)), "물질명": r_map.get(c,{}).get('n') or s_map.get(c,{}).get('n'), "원본": sv, "최종": rv, "상태": "✅" if match else "❌"})
+                rows.append({"번호": i, "CAS": ", ".join(list(c)), "물질명": r_map.get(c,{}).get('n') or s_map.get(c,{}).get('n'), "원본": sv, "양식": rv, "상태": "✅" if match else "❌"})
 
             # --- 접이식 결과 섹션 ---
             status_icon = "✅" if mismatch == 0 else "❌"
@@ -116,7 +116,7 @@ if src_file_list and res_file_list:
                 with m1:
                     st.success(f"**원본 제품명:** {p_name} ({src_name_check})  \n**원본 작성일:** {p_date}")
                 with m2:
-                    st.info(f"**최종 제품명:** {rp_name} ({res_name_check})  \n**최종 작성일:** {rp_date}")
+                    st.info(f"**양식 제품명:** {rp_name} ({res_name_check})  \n**양식 작성일:** {rp_date}")
                 
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
@@ -125,9 +125,10 @@ if src_file_list and res_file_list:
             st.error(f"{idx+1}번 파일 처리 중 오류: {e}")
 
     if len(src_file_list) != len(res_file_list):
-        st.warning("⚠️ 원본과 최종본의 파일 개수가 일치하지 않습니다.")
+        st.warning("⚠️ 원본과 양식의 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
+
 
 
 
