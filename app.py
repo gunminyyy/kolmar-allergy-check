@@ -58,7 +58,7 @@ def get_cas_set(cas_val):
     return frozenset(cas.strip() for cas in cas_list)
 
 # 3. 메인 UI 구성
-st.title("🧪 콜마 83 ALLERGENS 검토 시스템 (다중 매칭)")
+st.title("🧪 콜마 83 ALLERGENS 검토 시스템(HP,CFF)")
 st.info("원본과 최종본 파일을 **동일한 순서**로 업로드하세요. 순서대로 매칭되어 검증 및 PDF 저장이 가능합니다.")
 
 mode = st.radio("📂 원본 파일 양식을 선택하세요", ["CFF 양식", "HP 양식"], horizontal=True)
@@ -147,3 +147,4 @@ if src_files and res_files:
         st.download_button("📥 모든 결과 PDF 일괄 다운로드 (ZIP)", zip_buf.getvalue(), "All_Reports.zip", "application/zip")
 else:
     st.info("파일들을 업로드해 주세요.")
+
