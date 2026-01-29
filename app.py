@@ -14,7 +14,7 @@ def get_cas_set(cas_val):
     return frozenset(cas.strip() for cas in cas_list)
 
 # 3. 메인 UI 구성
-st.title("🧪 83 ALLERGENS 통합 검증 시스템")
+st.title("🧪 콜마 83 ALLERGENS 검증 시스템")
 st.info("원본 파일의 양식(CFF 또는 HP)을 선택한 후 파일을 업로드해 주세요.")
 
 # 양식 선택 라디오 버튼
@@ -120,3 +120,4 @@ if src_file and res_file:
 
 else:
     st.info("파일을 업로드하면 검증이 시작됩니다.")
+
