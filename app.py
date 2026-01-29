@@ -60,7 +60,7 @@ st.markdown("---")
 # 4. 검증 및 자동 수정 로직
 if src_file_list and res_file_list:
     num_pairs = min(len(src_file_list), len(res_file_list))
-    all_edited_files = [] #ZIP용
+    all_edited_files = [] 
 
     for idx in range(num_pairs):
         src_f = src_file_list[idx]
@@ -68,7 +68,6 @@ if src_file_list and res_file_list:
         mode = "HP" if "HP" in src_f.name.upper() else "CFF"
         
         try:
-            # 원본은 값만, 양식은 수정을 위해 수식 유지 로드
             wb_s = load_workbook(src_f, data_only=True)
             wb_r = load_workbook(res_f)
             
@@ -90,14 +89,12 @@ if src_file_list and res_file_list:
                     v = ws_s.cell(row=r, column=3).value
                     if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=1).value, "v": float(v)}
 
-            # 양식 데이터 수집 및 자동 수정 (원본 기준)
             yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
             rp_name, rp_date = str(ws_r['B10'].value or "N/A"), str(ws_r['E10'].value or "N/A").split(' ')[0]
             
             r_map = {}
             mismatch_count = 0
             
-            # 양식 파일을 돌며 CAS 매칭 후 원본 수치로 업데이트
             for r in range(1, 401):
                 cas_val = ws_r.cell(row=r, column=2).value
                 c_set = get_cas_set(cas_val)
@@ -106,7 +103,6 @@ if src_file_list and res_file_list:
                 curr_val = ws_r.cell(row=r, column=3).value
                 if c_set in s_map:
                     src_val = s_map[c_set]['v']
-                    # 수치가 다르거나 비어있으면 원본 값으로 덮어쓰기
                     try:
                         is_same = (curr_val is not None and abs(float(curr_val) - src_val) < 0.0001)
                     except:
@@ -120,6 +116,7 @@ if src_file_list and res_file_list:
                 else:
                     if curr_val is not None and curr_val != 0:
                         r_map[c_set] = {"n": ws_r.cell(row=r, column=1).value, "v": curr_val}
+                        mismatch_count += 1 # 원본에 없는데 양식에 값이 있는 경우도 불일치로 간주
 
             src_name_check = check_name_match(src_f.name, p_name)
             res_name_check = check_name_match(res_f.name, rp_name)
@@ -131,27 +128,38 @@ if src_file_list and res_file_list:
                 match = (sv != "누락" and rv != "누락" and abs(float(sv if sv != "누락" else 0) - float(rv if rv != "누락" else 0)) < 0.0001)
                 rows.append({"번호": i, "CAS": ", ".join(list(c)), "물질명": r_map.get(c,{}).get('n') or s_map.get(c,{}).get('n'), "원본": sv, "양식(수정후)": rv, "상태": "✅" if match else "⚠️ 수정됨"})
 
-            # 수정된 파일 메모리에 저장
             out = io.BytesIO()
             wb_r.save(out)
-            all_edited_files.append({"name": f"수정본_{res_f.name}", "data": out.getvalue()})
+            # 불일치가 있을 때만 ZIP 리스트에 추가
+            if mismatch_count > 0:
+                all_edited_files.append({"name": f"수정본_{res_f.name}", "data": out.getvalue()})
 
             # --- 결과 섹션 ---
-            status_icon = "✅" if mismatch_count == 0 else "🛠️"
-            expander_title = f"{status_icon} [{idx+1}번] {src_f.name} (자동수정: {mismatch_count}건)"
+            status_icon = "✅" if mismatch_count == 0 else "❌"
+            # (자동수정 -> 불일치) 멘트 수정
+            expander_title = f"{status_icon} [{idx+1}번] {src_f.name} (불일치: {mismatch_count}건)"
             
             with st.expander(expander_title):
                 m1, m2 = st.columns(2)
-                with m1: st.success(f"**원본 제품명:** {p_name} ({src_name_check}) \n**원본 작성일:** {p_date}")
-                with m2: st.info(f"**양식 제품명:** {rp_name} ({res_name_check}) \n**양식 작성일:** {rp_date}")
+                # 줄바꿈 처리를 위해 \n 사용 및 가독성 개선
+                with m1: 
+                    st.success(f"**원본 제품명:** \n{p_name} ({src_name_check})")
+                    st.write(f"**원본 작성일:** {p_date}")
+                with m2: 
+                    st.info(f"**양식 제품명:** \n{rp_name} ({res_name_check})")
+                    st.write(f"**양식 작성일:** {rp_date}")
+                
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-                st.download_button(f"💾 {idx+1}번 수정본 엑셀 다운로드", out.getvalue(), f"Edited_{res_f.name}", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"btn_{idx}")
+                
+                # 불일치가 0건이 아닐 때만 개별 다운로드 버튼 표시
+                if mismatch_count > 0:
+                    st.download_button(f"💾 {idx+1}번 수정본 엑셀 다운로드", out.getvalue(), f"Edited_{res_f.name}", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"btn_{idx}")
             
             wb_s.close(); wb_r.close()
         except Exception as e:
             st.error(f"{idx+1}번 파일 처리 중 오류: {e}")
 
-    # --- 일괄 다운로드 ---
+    # 일괄 다운로드 버튼도 수정본이 있을 때만 표시
     if all_edited_files:
         st.markdown("---")
         zip_buf = io.BytesIO()
