@@ -27,7 +27,7 @@ def check_name_match(file_name, product_name):
 
 # 3. 메인 UI 구성
 st.title("콜마 83 ALLERGENS 통합 검토 시스템(HP,CFF)")
-st.info("파일 순서를 맞추면 동일 순번끼리 자동으로 매칭됩니다.")
+st.info("원본과 양식 파일을 **동일한 순번**으로 배치하세요. 순서대로 매칭되어 검토 및 PDF 저장이 가능합니다.")
 
 st.markdown("---")
 
@@ -128,5 +128,6 @@ if src_file_list and res_file_list:
         st.warning("⚠️ 원본과 양식의 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
+
 
 
