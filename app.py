@@ -7,7 +7,7 @@ import io
 from streamlit_sortables import sort_items
 
 # 1. 화면 설정
-st.set_page_config(page_title="콜마 83 알러지 통합 검증", layout="wide")
+st.set_page_config(page_title="콜마 83 알러지 통합 검토", layout="wide")
 
 # 2. 공통 도구 함수
 def get_cas_set(cas_val):
@@ -16,7 +16,7 @@ def get_cas_set(cas_val):
     return frozenset(cas.strip() for cas in cas_list)
 
 # 3. 메인 UI 구성
-st.title("🧪 83 ALLERGENS 통합 검증 시스템")
+st.title("🧪 83 ALLERGENS 통합 검토 시스템")
 st.info("양식을 선택하고 파일을 업로드하세요. 업로드 후 드래그하여 순서를 바꿀 수 있습니다.")
 
 # 양식 선택
@@ -127,4 +127,5 @@ if src_file_list and res_file_list:
         st.error(f"에러 발생: {e}")
 else:
     st.info("파일들을 업로드하면 순서대로 매칭하여 검토를 시작합니다.")
+
 
