@@ -11,7 +11,6 @@ st.set_page_config(page_title="콜마 83 알러지 통합 검증", layout="wide"
 # 2. 공통 도구 함수
 def get_cas_set(cas_val):
     if not cas_val: return frozenset()
-    cas_list = re.findall(r'\d+-%d+-%d+', str(cas_val)) # LaTeX 방지 위해 표준 텍스트 유지
     cas_list = re.findall(r'\d+-\d+-\d+', str(cas_val))
     return frozenset(cas.strip() for cas in cas_list)
 
@@ -101,9 +100,13 @@ if src_file_list and res_file_list:
             expander_title = f"{status_icon} [{idx+1}번] 원본: {src_f.name} | 양식: {mode} (불일치: {mismatch}건)"
             
             with st.expander(expander_title):
+                # 좌우로 나누어 원본 정보와 최종본 정보를 구분
                 m1, m2 = st.columns(2)
-                m1.info(f"**제품명:** {p_name} / {rp_name}")
-                m2.info(f"**작성일:** {p_date} / {rp_date}")
+                with m1:
+                    st.success(f"**[원본 정보]**\n\n**제품명:** {p_name}\n\n**작성일:** {p_date}")
+                with m2:
+                    st.info(f"**[최종본 정보]**\n\n**제품명:** {rp_name}\n\n**작성일:** {rp_date}")
+                
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
             wb_s.close(); wb_r.close()
@@ -114,6 +117,3 @@ if src_file_list and res_file_list:
         st.warning("⚠️ 원본과 최종본의 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검증할 파일들을 업로드해 주세요.")
-
-
-
