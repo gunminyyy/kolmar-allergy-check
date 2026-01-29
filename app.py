@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 import io
 
 # 1. 화면 설정
-st.set_page_config(page_title="콜마 83 알러지 통합 검증", layout="wide")
+st.set_page_config(page_title="콜마 83 알러지 통합 검토", layout="wide")
 
 # 2. 공통 도구 함수
 def get_cas_set(cas_val):
@@ -14,7 +14,7 @@ def get_cas_set(cas_val):
     return frozenset(cas.strip() for cas in cas_list)
 
 # 3. 메인 UI 구성
-st.title("🧪 콜마 83 ALLERGENS 검증 시스템")
+st.title("🧪 콜마 83 ALLERGENS 검토 시스템")
 st.info("원본 파일의 양식(CFF 또는 HP)을 선택한 후 파일을 업로드해 주세요.")
 
 # 양식 선택 라디오 버튼
@@ -120,4 +120,5 @@ if src_file and res_file:
 
 else:
     st.info("파일을 업로드하면 검증이 시작됩니다.")
+
 
