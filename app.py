@@ -119,6 +119,7 @@ if src_file and res_file:
         st.error(f"데이터 처리 중 오류가 발생했습니다: {e}")
 
 else:
-    st.info("파일을 업로드하면 검증이 시작됩니다.")
+    st.info("파일을 업로드하면 검토가 시작됩니다.")
+
 
 
