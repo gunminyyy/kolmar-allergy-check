@@ -4,7 +4,6 @@ import re
 from openpyxl import load_workbook
 import io
 import zipfile
-from streamlit_sortables import sort_items
 from fpdf import FPDF
 
 # 1. 화면 설정
@@ -17,50 +16,38 @@ class AllergenPDF(FPDF):
         self.cell(0, 10, 'Allergen Review Report', 0, 1, 'C')
         self.ln(5)
 
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
-
 def create_pdf(df, prod_name, p_date, file_name):
-    # L: Landscape(가로), mm: 밀리미터 단위, A4 용지
+    # L: 가로방향 (열 맞춤을 위해 필수)
     pdf = AllergenPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
-    pdf.set_font('Arial', '', 10)
-    
-    # 상단 요약 정보 (제품명 등)
     pdf.set_font('Arial', 'B', 11)
     pdf.cell(0, 8, f"Product: {prod_name}", 0, 1)
     pdf.cell(0, 8, f"Date: {p_date}  |  File: {file_name}", 0, 1)
     pdf.ln(5)
     
-    # 테이블 헤더 설정
+    # 테이블 헤더
     pdf.set_fill_color(230, 230, 230)
     pdf.set_font('Arial', 'B', 10)
-    # 컬럼 너비 설정 (합계 277mm 내외)
-    cols = [("No", 15), ("CAS No", 50), ("Ingredient Name", 100), ("Source", 35), ("Result", 35), ("Status", 30)]
-    
+    cols = [("No", 15), ("CAS No", 50), ("Ingredient Name", 100), ("Src Val", 35), ("Res Val", 35), ("Status", 30)]
     for col_name, width in cols:
         pdf.cell(width, 10, col_name, 1, 0, 'C', True)
     pdf.ln()
     
-    # 테이블 데이터 입력
+    # 테이블 데이터
     pdf.set_font('Arial', '', 9)
     for _, row in df.iterrows():
         pdf.cell(cols[0][1], 8, str(row['번호']), 1, 0, 'C')
-        pdf.cell(cols[1][1], 8, str(row['CAS']), 1, 0, 'C')
-        # 글자 너무 길면 잘림 방지 (간략화)
+        pdf.cell(cols[1][1], 8, str(row['CAS 번호']), 1, 0, 'C')
+        # 한글 깨짐 방지를 위해 인코딩 처리 (데이터에 한글이 섞인 경우 공백 처리)
         ing_name = str(row['물질명']).encode('latin-1', 'ignore').decode('latin-1')
         pdf.cell(cols[2][1], 8, ing_name[:55], 1, 0, 'L')
-        pdf.cell(cols[3][1], 8, str(row['원본']), 1, 0, 'C')
-        pdf.cell(cols[4][1], 8, str(row['양식']), 1, 0, 'C')
+        pdf.cell(cols[3][1], 8, str(row['원본 수치']), 1, 0, 'C')
+        pdf.cell(cols[4][1], 8, str(row['최종 수치']), 1, 0, 'C')
         
-        # 상태 표시 (OK/FAIL)
-        status_text = "OK" if "✅" in str(row['상태']) else "FAIL"
-        if status_text == "FAIL":
-            pdf.set_text_color(255, 0, 0) # 불일치는 빨간색
-        pdf.cell(cols[5][1], 8, status_text, 1, 1, 'C')
-        pdf.set_text_color(0, 0, 0) # 다시 검정색으로
+        status = "OK" if "✅" in str(row['상태']) else "FAIL"
+        if status == "FAIL": pdf.set_text_color(255, 0, 0)
+        pdf.cell(cols[5][1], 8, status, 1, 1, 'C')
+        pdf.set_text_color(0, 0, 0)
 
     return pdf.output(dest='S').encode('latin-1')
 
@@ -70,98 +57,93 @@ def get_cas_set(cas_val):
     cas_list = re.findall(r'\d+-\d+-\d+', str(cas_val))
     return frozenset(cas.strip() for cas in cas_list)
 
-def check_name_match(file_name, product_name):
-    clean_file_name = re.sub(r'\.xlsx$', '', file_name, flags=re.IGNORECASE).strip()
-    clean_product_name = str(product_name).strip()
-    return "✅ 일치" if clean_product_name in clean_file_name or clean_file_name in clean_product_name else "❌ 불일치"
-
 # 3. 메인 UI 구성
-st.title("🧪 콜마 83 ALLERGENS 통합 검토 시스템")
-st.info("파일 순서를 맞추면 동일 순번끼리 매칭됩니다. 검토 후 PDF로 저장하세요.")
+st.title("🧪 콜마 83 ALLERGENS 검토 시스템 (다중 매칭)")
+st.info("원본과 최종본 파일을 **동일한 순서**로 업로드하세요. 순서대로 매칭되어 검증 및 PDF 저장이 가능합니다.")
+
+mode = st.radio("📂 원본 파일 양식을 선택하세요", ["CFF 양식", "HP 양식"], horizontal=True)
+st.markdown("---")
 
 col1, col2 = st.columns(2)
 with col1:
-    st.subheader("1. 원본 파일 목록")
-    uploaded_src = st.file_uploader("원본 선택 (xlsx)", type=["xlsx"], accept_multiple_files=True, key="src")
-    src_file_list = []
-    if uploaded_src:
-        sorted_src = sort_items([f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded_src)])
-        for name in sorted_src:
-            orig = name.split(". ", 1)[1]
-            src_file_list.append(next(f for f in uploaded_src if f.name == orig))
-
+    src_files = st.file_uploader(f"1. 원본({mode}) 파일들 업로드", type=["xlsx"], accept_multiple_files=True)
 with col2:
-    st.subheader("2. 양식(Result) 파일 목록")
-    uploaded_res = st.file_uploader("양식 선택 (xlsx)", type=["xlsx"], accept_multiple_files=True, key="res")
-    res_file_list = []
-    if uploaded_res:
-        sorted_res = sort_items([f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded_res)])
-        for name in sorted_res:
-            orig = name.split(". ", 1)[1]
-            res_file_list.append(next(f for f in uploaded_res if f.name == orig))
+    res_files = st.file_uploader("2. 최종본(Result) 파일들 업로드", type=["xlsx"], accept_multiple_files=True)
 
-st.markdown("---")
+# 4. 검증 로직 실행
+if src_files and res_files:
+    if len(src_files) != len(res_files):
+        st.warning(f"⚠️ 파일 개수 불일치: {min(len(src_files), len(res_files))}번까지만 비교합니다.")
 
-# 4. 검증 로직 및 결과 출력
-if src_file_list and res_file_list:
-    num_pairs = min(len(src_file_list), len(res_file_list))
-    all_pdfs = [] # 일괄 다운로드용
-    
-    for idx in range(num_pairs):
-        src_f, res_f = src_file_list[idx], res_file_list[idx]
-        mode = "HP" if "HP" in src_f.name.upper() else "CFF"
-        
-        try:
-            wb_s, wb_r = load_workbook(src_f, data_only=True), load_workbook(res_f, data_only=True)
-            ws_s = wb_s[next((s for s in wb_s.sheetnames if 'ALLERGEN' in s.upper() or 'Sheet' in s), wb_s.sheetnames[0])]
-            ws_r = wb_r[next((s for s in wb_r.sheetnames if 'ALLERGY' in s.upper()), wb_r.sheetnames[0])]
+    all_pdf_data = [] # 일괄 다운로드용
 
-            # 데이터 맵 생성 (생략된 기존 로직과 동일)
-            s_map, r_map = {}, {}
-            if mode == "CFF":
-                p_name, p_date = str(ws_s['D7'].value or "N/A"), str(ws_s['N9'].value or "N/A").split(' ')[0]
-                for r in range(13, 96):
-                    c, v = get_cas_set(ws_s.cell(row=r, column=6).value), ws_s.cell(row=r, column=12).value
-                    if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=2).value, "v": float(v)}
-            else:
-                p_name, p_date = str(ws_s['B10'].value or "N/A"), str(ws_s['E10'].value or "N/A").split(' ')[0]
-                for r in range(1, 401):
-                    c, v = get_cas_set(ws_s.cell(row=r, column=2).value), ws_s.cell(row=r, column=3).value
-                    if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=1).value, "v": float(v)}
-
-            rp_name, rp_date = str(ws_r['B10'].value or "N/A"), str(ws_r['E10'].value or "N/A").split(' ')[0]
-            for r in range(1, 401):
-                c, v = get_cas_set(ws_r.cell(row=r, column=2).value), ws_r.cell(row=r, column=3).value
-                if c and v is not None and v != 0: r_map[c] = {"n": ws_r.cell(row=r, column=1).value, "v": float(v)}
-
-            all_cas = sorted(list(set(s_map.keys()) | set(r_map.keys())), key=lambda x: list(x)[0] if x else "")
-            rows = []
-            mismatch = 0
-            for i, c in enumerate(all_cas, 1):
-                sv, rv = s_map.get(c, {}).get('v', "누락"), r_map.get(c, {}).get('v', "누락")
-                match = (sv != "누락" and rv != "누락" and abs(sv - rv) < 0.0001)
-                if not match: mismatch += 1
-                rows.append({"번호": i, "CAS": ", ".join(list(c)), "물질명": r_map.get(c,{}).get('n') or s_map.get(c,{}).get('n'), "원본": sv, "양식": rv, "상태": "✅" if match else "❌"})
-
-            df_res = pd.DataFrame(rows)
-            
-            # --- 결과 화면 ---
-            with st.expander(f"[{idx+1}번] {res_f.name} (불일치: {mismatch})"):
-                st.dataframe(df_res, use_container_width=True, hide_index=True)
+    for idx, (src_f, res_f) in enumerate(zip(src_files, res_files), 1):
+        with st.expander(f"📋 {idx}번 매칭 결과: {src_f.name} ↔ {res_f.name}", expanded=True):
+            try:
+                wb_src = load_workbook(src_f, data_only=True)
+                wb_res = load_workbook(res_f, data_only=True)
                 
-                # PDF 생성
-                pdf_bytes = create_pdf(df_res, rp_name, rp_date, res_f.name)
-                st.download_button(f"📄 {rp_name} PDF 저장", pdf_bytes, f"Result_{idx+1}.pdf", "application/pdf", key=f"btn_{idx}")
-                all_pdfs.append({"name": f"Result_{idx+1}_{rp_name}.pdf", "data": pdf_bytes})
+                src_sheet = next((s for s in wb_src.sheetnames if 'ALLERGEN' in s.upper() or 'Sheet' in s), wb_src.sheetnames[0])
+                res_sheet = next((s for s in wb_res.sheetnames if 'ALLERGY' in s.upper()), wb_res.sheetnames[0])
+                
+                ws_src, ws_res = wb_src[src_sheet], wb_res[res_sheet]
+                src_map, res_map = {}, {}
 
-            wb_s.close(); wb_r.close()
-        except Exception as e:
-            st.error(f"{idx+1}번 파일 처리 중 오류: {e}")
+                # 데이터 수집 (사용자님의 기존 로직 그대로)
+                if mode == "CFF 양식":
+                    src_p, src_d = str(ws_src['D7'].value or "N/A"), str(ws_src['N9'].value or "N/A").split(' ')[0]
+                    for r in range(13, 96):
+                        c = get_cas_set(ws_src.cell(row=r, column=6).value)
+                        v = ws_src.cell(row=r, column=12).value
+                        if c and v is not None and v != 0: src_map[c] = {"name": ws_src.cell(row=r, column=2).value, "val": float(v)}
+                else:
+                    src_p, src_d = str(ws_src['B10'].value or "N/A"), str(ws_src['E10'].value or "N/A").split(' ')[0]
+                    for r in range(1, 400):
+                        c = get_cas_set(ws_src.cell(row=r, column=2).value)
+                        v = ws_src.cell(row=r, column=3).value
+                        if c and v is not None and v != 0: src_map[c] = {"name": ws_src.cell(row=r, column=1).value, "val": float(v)}
 
-    # --- 전체 다운로드 ---
-    if all_pdfs:
+                res_p, res_d = str(ws_res['B10'].value or "N/A"), str(ws_res['E10'].value or "N/A").split(' ')[0]
+                for r in range(1, 400):
+                    c = get_cas_set(ws_res.cell(row=r, column=2).value)
+                    v = ws_res.cell(row=r, column=3).value
+                    if c and v is not None and v != 0: res_map[c] = {"name": ws_res.cell(row=r, column=1).value, "val": float(v)}
+
+                # 비교 결과 생성
+                all_cas = sorted(list(set(src_map.keys()) | set(res_map.keys())), key=lambda x: list(x)[0] if x else "")
+                table_data = []
+                match_count = 0
+                for i, c in enumerate(all_cas, 1):
+                    s_v, r_v = src_map.get(c, {}).get('val', "누락"), res_map.get(c, {}).get('val', "누락")
+                    is_match = (s_v != "누락" and r_v != "누락" and abs(s_v - r_v) < 0.0001)
+                    if is_match: match_count += 1
+                    table_data.append({
+                        "번호": i, "CAS 번호": ", ".join(list(c)), 
+                        "물질명": res_map.get(c,{}).get('name') or src_map.get(c,{}).get('name') or "Unknown",
+                        "원본 수치": s_v, "최종 수치": r_v, "상태": "✅ 일치" if is_match else "❌ 불일치"
+                    })
+
+                # 화면 출력
+                df = pd.DataFrame(table_data)
+                st.info(f"**원본:** {src_p} ({src_d}) / **최종:** {res_p} ({res_d})")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.metric(f"매칭 {idx} 결과", f"총 {len(df)}건", f"불일치 {len(df)-match_count}건", delta_color="inverse")
+
+                # 개별 PDF 다운로드 버튼
+                pdf_bytes = create_pdf(df, res_p, res_d, res_f.name)
+                st.download_button(f"📄 {idx}번 결과 PDF 저장", pdf_bytes, f"Result_{idx}.pdf", "application/pdf", key=f"dl_{idx}")
+                all_pdf_data.append({"name": f"Result_{idx}_{res_p}.pdf", "data": pdf_bytes})
+
+                wb_src.close(); wb_res.close()
+            except Exception as e:
+                st.error(f"{idx}번 처리 오류: {e}")
+
+    # 일괄 다운로드 (ZIP)
+    if all_pdf_data:
         st.markdown("---")
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
-            for p in all_pdfs: zf.writestr(p["name"], p["data"])
-        st.download_button("📥 모든 결과 PDF 일괄 다운로드 (ZIP)", zip_buf.getvalue(), "All_Allergy_Reports.zip", "application/zip")
+            for p in all_pdf_data: zf.writestr(p["name"], p["data"])
+        st.download_button("📥 모든 결과 PDF 일괄 다운로드 (ZIP)", zip_buf.getvalue(), "All_Reports.zip", "application/zip")
+else:
+    st.info("파일들을 업로드해 주세요.")
