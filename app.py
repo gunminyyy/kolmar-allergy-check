@@ -11,30 +11,11 @@ st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 # [수정] 파일 업로더 레이아웃 보정 및 목록 세로 정렬 CSS
 st.markdown("""
     <style>
-    /* 1. 파일 업로더 내부 요소가 배경 밖으로 나가지 않도록 조정 */
-    [data-testid="stFileUploader"] {
-        width: 100%;
-    }
-    [data-testid="stFileUploaderDropzone"] {
-        padding: 1rem;  /* 내부 여유 공간 확보 */
-        min-height: 150px;
-    }
-    /* 업로더 내부의 글씨 크기 및 간격 최적화 */
-    [data-testid="stFileUploaderDropzone"] div div {
-        gap: 0.5rem;
-    }
-    [data-testid="stFileUploaderDropzone"] small {
-        display: block;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    /* 2. 정렬 목록(sort_items) 세로 꽉 차게 설정 */
-    div[data-testid="stHorizontalBlock"] div div div div {
-        display: block !important;
-        width: 100% !important;
-    }
+    [data-testid="stFileUploader"] { width: 100%; }
+    [data-testid="stFileUploaderDropzone"] { padding: 1rem; min-height: 150px; }
+    [data-testid="stFileUploaderDropzone"] div div { gap: 0.5rem; }
+    [data-testid="stFileUploaderDropzone"] small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    div[data-testid="stHorizontalBlock"] div div div div { display: block !important; width: 100% !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -107,25 +88,15 @@ if src_file_list and res_file_list:
     num_pairs = min(len(src_file_list), len(res_file_list))
     
     for idx in range(num_pairs):
-        src_f_raw = src_file_list[idx]
-        res_f_raw = res_file_list[idx]
-        
-        src_f = convert_xls_to_xlsx(src_f_raw)
-        res_f = convert_xls_to_xlsx(res_f_raw)
-        
-        src_upper = src_f_raw.name.upper()
-        res_upper = res_f_raw.name.upper()
-        
+        src_f_raw, res_f_raw = src_file_list[idx], res_file_list[idx]
+        src_f, res_f = convert_xls_to_xlsx(src_f_raw), convert_xls_to_xlsx(res_f_raw)
+        src_upper, res_upper = src_f_raw.name.upper(), res_f_raw.name.upper()
         is_83_mode = "83" in res_upper
         mode_label = "83 알러지" if is_83_mode else "23 알러지"
         
         try:
-            wb_s = load_workbook(src_f, data_only=True)
-            wb_r = load_workbook(res_f, data_only=True)
-            
-            ws_s = wb_s.worksheets[0]
-            ws_r = wb_r.worksheets[0]
-
+            wb_s, wb_r = load_workbook(src_f, data_only=True), load_workbook(res_f, data_only=True)
+            ws_s, ws_r = wb_s.worksheets[0], wb_r.worksheets[0]
             s_map, r_map = {}, {}
             
             # --- 1. 원본(Source) 데이터 추출 ---
@@ -164,16 +135,11 @@ if src_file_list and res_file_list:
 
             # --- 3. 데이터 필터링 (23 알러지 모드 전용) ---
             if not is_83_mode:
-                filtered_s_map = {}
-                for cas_set, data in s_map.items():
-                    if not cas_set.isdisjoint(TARGET_23_CAS):
-                        filtered_s_map[cas_set] = data
-                s_map = filtered_s_map
+                s_map = {cas: data for cas, data in s_map.items() if not cas.isdisjoint(TARGET_23_CAS)}
 
             # --- 4. 데이터 대조 ---
             rows, mismatch = [], 0
-            all_s_cas = list(s_map.keys())
-            all_r_cas = list(r_map.keys())
+            all_s_cas, all_r_cas = list(s_map.keys()), list(r_map.keys())
             matched_r_cas = set()
             
             for s_cas in all_s_cas:
@@ -193,16 +159,19 @@ if src_file_list and res_file_list:
                     mismatch += 1
                     rows.append({"번호": len(rows)+1, "CAS": ", ".join(list(r_cas)), "물질명": r_map[r_cas]['n'], "원본": "누락", "양식": r_map[r_cas]['v'], "상태": "❌"})
 
+            # --- [추가] 토탈값 계산 로직 ---
+            total_src = sum([row['원본'] for row in rows if isinstance(row['원본'], (int, float))])
+            total_res = sum([row['양식'] for row in rows if isinstance(row['양식'], (int, float))])
+            total_match = abs(total_src - total_res) < 0.0001
+            rows.append({"번호": "Total", "CAS": "-", "물질명": "합계", "원본": round(total_src, 6), "양식": round(total_res, 6), "상태": "✅" if total_match else "❌"})
+
             status_icon = "✅" if mismatch == 0 else "❌"
             expander_title = f"{status_icon} [{idx+1}번] {mode_label} | {res_f_raw.name} (불일치: {mismatch}건)"
             
             with st.expander(expander_title):
                 m1, m2 = st.columns(2)
-                with m1: 
-                    st.success(f"**원본 제품명:** {p_name} ({check_name_match(src_f_raw.name, p_name)})\n\n**원본 작성일:** {p_date}")
-                with m2: 
-                    st.info(f"**양식 제품명:** {rp_name} ({check_name_match(res_f_raw.name, rp_name)})\n\n**양식 작성일:** {rp_date}")
-                
+                with m1: st.success(f"**원본 제품명:** {p_name} ({check_name_match(src_f_raw.name, p_name)})\n\n**원본 작성일:** {p_date}")
+                with m2: st.info(f"**양식 제품명:** {rp_name} ({check_name_match(res_f_raw.name, rp_name)})\n\n**양식 작성일:** {rp_date}")
                 st.markdown("") 
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
@@ -210,7 +179,5 @@ if src_file_list and res_file_list:
         except Exception as e:
             st.error(f"{idx+1}번 파일 처리 중 오류: {e}")
 
-    if len(src_file_list) != len(res_file_list):
-        st.warning("⚠️ 파일 개수가 일치하지 않습니다.")
-else:
-    st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
+    if len(src_file_list) != len(res_file_list): st.warning("⚠️ 파일 개수가 일치하지 않습니다.")
+else: st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
