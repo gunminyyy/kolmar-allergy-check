@@ -8,7 +8,7 @@ from streamlit_sortables import sort_items
 # 1. 화면 설정
 st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 
-# [CSS] 파일 업로더 레이아웃 및 목록 세로 정렬
+# [CSS] 파일 업로더 레이아웃 보정
 st.markdown("""
     <style>
     [data-testid="stFileUploader"] { width: 100%; }
@@ -53,17 +53,10 @@ def check_name_match(file_name, product_name):
 # 3. 메인 UI 구성
 st.title("ALLERGENS 자료 통합 검토 시스템(HP/CFF)")
 
-# 검토 모드 선택
-mode = st.radio(
-    "검토 방식 선택",
-    ["원본 vs 83알러지", "원본 vs 26알러지", "83알러지 vs 26알러지", "원본 vs 83알러지 vs 26알러지"],
-    horizontal=True
-)
-
+mode = st.radio("검토 방식 선택", ["원본 vs 83알러지", "원본 vs 26알러지", "83알러지 vs 26알러지", "원본 vs 83알러지 vs 26알러지"], horizontal=True)
 st.info("파일들을 **동일한 순번**으로 배치하세요.")
 st.markdown("---")
 
-# 업로드 박스 배치
 files_A, files_B, files_C = [], [], []
 if mode == "원본 vs 83알러지 vs 26알러지":
     col1, col2, col3 = st.columns(3)
@@ -94,7 +87,6 @@ if mode == "원본 vs 83알러지 vs 26알러지":
 
 st.markdown("---")
 
-# 데이터 추출 함수 (중복 로직 제거용)
 def extract_data(file_raw, is_23=False, is_83=False):
     f = convert_xls_to_xlsx(file_raw)
     wb = load_workbook(f, data_only=True)
@@ -102,38 +94,29 @@ def extract_data(file_raw, is_23=False, is_83=False):
     name_upper = file_raw.name.upper()
     data_map = {}
     
-    # 원본(HP/HPD/CFF) 및 83/26 양식 위치 로직
     if is_83: # 83알러지 양식
-        p_name, p_date = str(ws['B10'].value or "N/A"), str(ws['E10'].value or "N/A").split(' ')[0]
         for r in range(1, 401):
-            c = get_cas_set(ws.cell(row=r, column=2).value)
-            v = ws.cell(row=r, column=3).value
+            c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
             if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": float(v)}
     elif is_23: # 26종 알러지 양식
-        p_name, p_date = str(ws['B12'].value or "N/A"), str(ws['E13'].value or "N/A").split(' ')[0]
         for r in range(18, 44):
-            c = get_cas_set(ws.cell(row=r, column=2).value)
-            v = ws.cell(row=r, column=3).value
+            c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
             if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value or "지정성분", "v": float(v)}
     else: # 원본
         if "HPD" in name_upper:
-            p_name, p_date = str(ws['C10'].value or "N/A"), str(ws['H10'].value or "N/A").split(' ')[0]
             for r in range(17, 99):
                 c, v = get_cas_set(ws.cell(row=r, column=3).value), ws.cell(row=r, column=6).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
         elif "HP" in name_upper:
-            p_name, p_date = str(ws['B10'].value or "N/A"), str(ws['E10'].value or "N/A").split(' ')[0]
             for r in range(1, 401):
                 c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": float(v)}
         else: # CFF
-            p_name, p_date = str(ws['D7'].value or "N/A"), str(ws['N9'].value or "N/A").split(' ')[0]
             for r in range(13, 96):
                 c, v = get_cas_set(ws.cell(row=r, column=6).value), ws.cell(row=r, column=12).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
-    
     wb.close()
-    return p_name, p_date, data_map
+    return data_map
 
 # 4. 검증 로직 및 결과 출력
 ready = files_A and files_B
@@ -144,48 +127,54 @@ if ready:
     
     for idx in range(num_pairs):
         try:
-            # 데이터 추출
-            n1, d1, m1 = extract_data(files_A[idx], is_23=("26알러지" in labels[0]), is_83=("83알러지" in labels[0]))
-            n2, d2, m2 = extract_data(files_B[idx], is_23=("26알러지" in labels[1]), is_83=("83알러지" in labels[1]))
-            
-            m3 = None
-            if mode == "원본 vs 83알러지 vs 26알러지":
-                n3, d3, m3 = extract_data(files_C[idx], is_23=True)
-                # 3개 검토 시 원본(m1)에서 26종 CAS만 필터링
-                m1 = {cas: data for cas, data in m1.items() if not cas.isdisjoint(TARGET_23_CAS)}
-            elif "26알러지" in mode:
-                # 2개 검토 중 26알러지가 포함된 경우 원본/83 필터링
-                if "26알러지" in labels[1]: m1 = {cas: data for cas, data in m1.items() if not cas.isdisjoint(TARGET_23_CAS)}
-                else: m2 = {cas: data for cas, data in m2.items() if not cas.isdisjoint(TARGET_23_CAS)}
+            m1 = extract_data(files_A[idx], is_23=("26알러지" in labels[0]), is_83=("83알러지" in labels[0]))
+            m2 = extract_data(files_B[idx], is_23=("26알러지" in labels[1]), is_83=("83알러지" in labels[1]))
+            m3 = extract_data(files_C[idx], is_23=True) if mode == "원본 vs 83알러지 vs 26알러지" else None
 
-            # 대조 로직
+            # [수정] 26알러지 관련 모드일 경우 원본/83 데이터를 26종 리스트로 필터링
+            if "26알러지" in mode:
+                m1 = {cas: d for cas, d in m1.items() if not cas.isdisjoint(TARGET_23_CAS)}
+                m2 = {cas: d for cas, d in m2.items() if not cas.isdisjoint(TARGET_23_CAS)}
+                if m3: m3 = {cas: d for cas, d in m3.items() if not cas.isdisjoint(TARGET_23_CAS)}
+
+            # [수정] 모든 파일의 CAS를 합쳐서 대조군 생성
+            all_cas_sets = set(m1.keys()) | set(m2.keys())
+            if m3: all_cas_sets |= set(m3.keys())
+
             rows, mismatch = [], 0
-            base_map = m1
-            compare_maps = [m2] if m3 is None else [m2, m3]
             
-            for cas, data in base_map.items():
-                v_base = data['v']
-                res_vals = []
-                row_match = True
+            for cas in all_cas_sets:
+                # 각 맵에서 해당 CAS(또는 교집합)를 찾음
+                v1_data = next((m1[c] for c in m1 if not cas.isdisjoint(c)), None)
+                v2_data = next((m2[c] for c in m2 if not cas.isdisjoint(c)), None)
+                v3_data = next((m3[c] for c in m3 if not cas.isdisjoint(c)), None) if m3 else None
+
+                v1 = v1_data['v'] if v1_data else "누락"
+                v2 = v2_data['v'] if v2_data else "누락"
+                v3 = v3_data['v'] if v3_data else None
+
+                # 이름 결정 (데이터가 있는 곳 우선)
+                name = (v1_data or v2_data or v3_data)['n']
+
+                # 상태 판정 (수치 비교)
+                match = True
+                compare_list = [v for v in [v1, v2, v3] if v is not None]
+                if "누락" in compare_list:
+                    match = False
+                elif len(set(compare_list)) > 1:
+                    # 소수점 오차 허용 비교
+                    it = iter(compare_list)
+                    first = next(it)
+                    if not all(abs(first - rest) < 0.0001 for rest in it): match = False
+
+                if not match: mismatch += 1
                 
-                for target_map in compare_maps:
-                    found_cas = next((tc for tc in target_map.keys() if not cas.isdisjoint(tc)), None)
-                    if found_cas:
-                        v_comp = target_map[found_cas]['v']
-                        res_vals.append(v_comp)
-                        if abs(v_base - v_comp) > 0.0001: row_match = False
-                    else:
-                        res_vals.append("누락")
-                        row_match = False
-                
-                if not row_match: mismatch += 1
-                
-                row_data = {"번호": len(rows)+1, "CAS": ", ".join(list(cas)), "물질명": data['n'], labels[0]: v_base, labels[1]: res_vals[0]}
-                if m3: row_data[labels[2]] = res_vals[1]
-                row_data["상태"] = "✅" if row_match else "❌"
+                row_data = {"번호": len(rows)+1, "CAS": ", ".join(list(cas)), "물질명": name, labels[0]: v1, labels[1]: v2}
+                if m3: row_data[labels[2]] = v3 if v3 is not None else "누락"
+                row_data["상태"] = "✅" if match else "❌"
                 rows.append(row_data)
 
-            # 합계 행
+            # 합계 행 로직
             def get_sum(df_rows, key):
                 return sum([r[key] for r in df_rows if isinstance(r[key], (int, float))])
             
@@ -196,16 +185,10 @@ if ready:
                 t_c = get_sum(rows, labels[2])
                 total_row[labels[2]] = round(t_c, 6)
                 if abs(t_a - t_c) > 0.0001: total_match = False
-            
             total_row["상태"] = "✅" if total_match else "❌"
             rows.append(total_row)
 
-            # 출력
             st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {mode} | {files_A[idx].name}").dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
         except Exception as e:
             st.error(f"{idx+1}번 처리 오류: {e}")
-else:
-    st.info("검토할 파일들을 모두 업로드해 주세요.")
-
-
