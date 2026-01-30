@@ -62,30 +62,36 @@ def extract_data(file_raw, is_23=False, is_83=False):
     ws = wb.worksheets[0]
     name_upper = file_raw.name.upper()
     data_map = {}
+    product_name = "알 수 없음"
     
     if is_83: # 83알러지 양식
+        product_name = ws.cell(row=10, column=2).value or "제품명 누락" # B10
         for r in range(1, 401):
             c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
             if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": float(v)}
     elif is_23: # 26종 알러지 양식
+        product_name = ws.cell(row=12, column=2).value or "제품명 누락" # B12
         for r in range(18, 44):
             c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
             if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value or "지정성분", "v": float(v)}
-    else: # 원본 (HP/HPD/CFF 판별 유지)
+    else: # 원본
         if "HPD" in name_upper:
+            product_name = ws.cell(row=10, column=3).value or "제품명 누락" # C10
             for r in range(17, 99):
                 c, v = get_cas_set(ws.cell(row=r, column=3).value), ws.cell(row=r, column=6).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
         elif "HP" in name_upper:
+            product_name = ws.cell(row=10, column=2).value or "제품명 누락" # B10
             for r in range(1, 401):
                 c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": float(v)}
         else: # CFF
+            product_name = ws.cell(row=7, column=4).value or "제품명 누락" # D7
             for r in range(13, 96):
                 c, v = get_cas_set(ws.cell(row=r, column=6).value), ws.cell(row=r, column=12).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
     wb.close()
-    return data_map
+    return str(product_name).strip(), data_map
 
 # 3. 메인 UI 구성
 st.title("ALLERGENS 자료 통합 검토 시스템(HP/CFF)")
@@ -120,9 +126,12 @@ if ready:
     
     for idx in range(num_pairs):
         try:
-            m1 = extract_data(files_A[idx], is_23=("26알러지" in labels[0]), is_83=("83알러지" in labels[0]))
-            m2 = extract_data(files_B[idx], is_23=("26알러지" in labels[1]), is_83=("83알러지" in labels[1]))
-            m3 = extract_data(files_C[idx], is_23=True) if mode == "원본 vs 83알러지 vs 26알러지" else None
+            # 첫 번째 파일(label[0])의 제품명을 대표 이름으로 사용
+            p_name, m1 = extract_data(files_A[idx], is_23=("26알러지" in labels[0]), is_83=("83알러지" in labels[0]))
+            _, m2 = extract_data(files_B[idx], is_23=("26알러지" in labels[1]), is_83=("83알러지" in labels[1]))
+            m3 = None
+            if mode == "원본 vs 83알러지 vs 26알러지":
+                _, m3 = extract_data(files_C[idx], is_23=True)
 
             if "26알러지" in mode:
                 m1 = {cas: d for cas, d in m1.items() if not cas.isdisjoint(TARGET_23_CAS)}
@@ -145,7 +154,6 @@ if ready:
 
                 name = (v1_data or v2_data or v3_data)['n']
 
-                # --- 상태 판정 로직 강화 ---
                 match = True
                 compare_vals = [v for v in [v1, v2, v3] if v is not None]
                 
@@ -156,7 +164,6 @@ if ready:
                     first = next(it)
                     if not all(abs(first - rest) < 0.0001 for rest in it):
                         match = False
-                # -------------------------
 
                 if not match: mismatch += 1
                 
@@ -178,10 +185,10 @@ if ready:
             total_row["상태"] = "✅" if total_match else "❌"
             rows.append(total_row)
 
-            st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {mode} | {files_A[idx].name}").dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            # 제목을 추출한 제품명(p_name)으로 표시
+            st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {p_name}").dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
         except Exception as e:
             st.error(f"{idx+1}번 처리 오류: {e}")
 else:
     st.info("검토할 파일들을 모두 업로드해 주세요.")
-
