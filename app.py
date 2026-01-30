@@ -91,7 +91,6 @@ if src_file_list and res_file_list:
             
             # --- 1. 원본(Source) 데이터 추출 ---
             if "HPD" in src_upper:
-                # [수정] HI10 병합셀의 데이터는 H10에서 추출
                 p_name, p_date = str(ws_s['C10'].value or "N/A"), str(ws_s['H10'].value or "N/A").split(' ')[0]
                 for r in range(17, 99):
                     c = get_cas_set(ws_s.cell(row=r, column=3).value)
@@ -146,19 +145,18 @@ if src_file_list and res_file_list:
                     mismatch += 1
                     rows.append({"번호": len(rows)+1, "CAS": ", ".join(list(r_cas)), "물질명": r_map[r_cas]['n'], "원본": "누락", "양식": r_map[r_cas]['v'], "상태": "❌"})
 
-            # [수정] expander 타이틀을 양식 파일명(res_f_raw.name)으로 표시
             status_icon = "✅" if mismatch == 0 else "❌"
             expander_title = f"{status_icon} [{idx+1}번] {mode_label} | {res_f_raw.name} (불일치: {mismatch}건)"
             
             with st.expander(expander_title):
                 m1, m2 = st.columns(2)
-                # [수정] 줄바꿈과 구분을 위한 텍스트 포맷팅 개선
+                # 제품명과 작성일 2줄로 단순화
                 with m1: 
-                    st.success(f"**[원본 데이터 정보]**\n\n**제품명:** {p_name}\n\n**파일명 일치:** {check_name_match(src_f_raw.name, p_name)}\n\n--- \n\n**작성일:** {p_date}")
+                    st.success(f"**원본 제품명:** {p_name} ({check_name_match(src_f_raw.name, p_name)})\n\n**원본 작성일:** {p_date}")
                 with m2: 
-                    st.info(f"**[양식 데이터 정보]**\n\n**제품명:** {rp_name}\n\n**파일명 일치:** {check_name_match(res_f_raw.name, rp_name)}\n\n--- \n\n**작성일:** {rp_date}")
+                    st.info(f"**양식 제품명:** {rp_name} ({check_name_match(res_f_raw.name, rp_name)})\n\n**양식 작성일:** {rp_date}")
                 
-                st.markdown("---")
+                st.markdown("") # 여백용
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
             wb_s.close(); wb_r.close()
@@ -169,4 +167,3 @@ if src_file_list and res_file_list:
         st.warning("⚠️ 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
-
