@@ -64,8 +64,19 @@ def extract_data(file_raw, is_23=False, is_83=False):
     data_map = {}
     product_name = "알 수 없음"
     
-    # --- 제품명 추출 로직 수정 ---
-    if is_83: # 83알러지 양식
+    # --- 새로운 양식 판별 조건 추가 ---
+    val_a1 = str(ws.cell(row=1, column=1).value or "").strip()
+    val_b1 = str(ws.cell(row=1, column=2).value or "").strip()
+    
+    if val_a1 == "성분코드" and val_b1 == "성분국문명":
+        # 새로운 83알러지 양식 로직: F열(CAS), H열(함량)
+        product_name = file_raw.name
+        for r in range(2, 85): # 2행부터 84행까지
+            c, v = get_cas_set(ws.cell(row=r, column=6).value), ws.cell(row=r, column=8).value
+            if c and v is not None and v != 0: 
+                data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
+    # ----------------------------
+    elif is_83: # 83알러지 양식
         product_name = ws.cell(row=10, column=2).value # B10
         for r in range(1, 401):
             c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
@@ -124,11 +135,10 @@ ready = files_A and files_B
 if mode == "원본 vs 83알러지 vs 26알러지": ready = ready and files_C
 
 if ready:
-    num_pairs = min(len(files_A), len(files_B), len(files_C)) if files_C else min(len(files_A), len(files_B))
+    num_pairs = min(len(files_A), len(files_B), len(files_C)) if (mode == "원본 vs 83알러지 vs 26알러지") else min(len(files_A), len(files_B))
     
     for idx in range(num_pairs):
         try:
-            # --- 수정 포인트: 제목으로 사용할 제품명은 '원본'이 아닌 '83/26알러지 양식'에서 우선 추출하도록 순서 조정 ---
             # m1 데이터 추출
             p_name_1, m1 = extract_data(files_A[idx], is_23=("26알러지" in labels[0]), is_83=("83알러지" in labels[0]))
             # m2 데이터 추출
@@ -139,11 +149,10 @@ if ready:
             if mode == "원본 vs 83알러지 vs 26알러지":
                 p_name_3, m3 = extract_data(files_C[idx], is_23=True)
 
-            # 대표 제품명 결정 (83알러지나 26알러지 양식에 적힌 이름을 우선순위로 사용)
-            # labels 순서에 따라 양식 파일이 있는 쪽의 이름을 가져옵니다.
+            # 대표 제품명 결정
             display_p_name = p_name_2 if "알러지" in labels[1] else p_name_1
             if mode == "원본 vs 83알러지 vs 26알러지":
-                display_p_name = p_name_2 # 보통 83알러지가 2번째 컬럼이므로
+                display_p_name = p_name_2
 
             if "26알러지" in mode:
                 m1 = {cas: d for cas, d in m1.items() if not cas.isdisjoint(TARGET_23_CAS)}
@@ -197,7 +206,6 @@ if ready:
             total_row["상태"] = "✅" if total_match else "❌"
             rows.append(total_row)
 
-            # 미리보기 제목을 양식에서 추출한 이름(display_p_name)으로 설정
             st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {display_p_name}").dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
         except Exception as e:
