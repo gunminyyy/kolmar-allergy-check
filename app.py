@@ -8,7 +8,6 @@ from streamlit_sortables import sort_items
 # 1. 화면 설정
 st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 
-# xls 파일을 openpyxl이 읽을 수 있도록 메모리에서 변환하는 함수
 def convert_xls_to_xlsx(uploaded_file):
     if uploaded_file.name.lower().endswith('.xls'):
         df_dict = pd.read_excel(uploaded_file, sheet_name=None, engine='xlrd')
@@ -20,13 +19,11 @@ def convert_xls_to_xlsx(uploaded_file):
         return output
     return uploaded_file
 
-# 2. 공통 도구 함수
 def get_cas_set(cas_val):
     if not cas_val: return frozenset()
     cas_list = re.findall(r'\d+-\d+-\d+', str(cas_val))
     return frozenset(cas.strip() for cas in cas_list)
 
-# 파일명과 제품명 비교 함수
 def check_name_match(file_name, product_name):
     clean_file_name = re.sub(r'\.(xlsx|xls)$', '', file_name, flags=re.IGNORECASE).strip()
     clean_product_name = str(product_name).strip()
@@ -35,8 +32,8 @@ def check_name_match(file_name, product_name):
     return "❌ 불일치"
 
 # 3. 메인 UI 구성
-st.title("ALLERGENS 자료 통합 검토 시스템(HP/CFF)")
-st.info("원본과 양식 파일을 **동일한 순번**으로 배치하세요. 동일한 순번끼리 매칭해 검토를 시작합니다.")
+st.title("ALLERGENS 자료 통합 검토 시스템(HP/CFF/CFF)")
+st.info("원본과 양식 파일을 **동일한 순번**으로 배치하세요. 양식 파일명에 '83' 포함 여부로 버전을 판별합니다.")
 
 st.markdown("---")
 
@@ -44,11 +41,10 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("1. 원본 파일 목록")
-    uploaded_src_files = st.file_uploader("원본 선택 (다중 가능)", type=["xlsx", "xls"], accept_multiple_files=True, key="src_upload")
+    uploaded_src_files = st.file_uploader("원본 선택", type=["xlsx", "xls"], accept_multiple_files=True, key="src_upload")
     src_file_list = []
     if uploaded_src_files:
         file_display_names = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded_src_files)]
-        st.caption("▼ 드래그하여 순서 조정")
         sorted_names = sort_items(file_display_names)
         for name in sorted_names:
             orig = name.split(". ", 1)[1]
@@ -56,11 +52,10 @@ with col1:
 
 with col2:
     st.subheader("2. 양식(Result) 파일 목록")
-    uploaded_res_files = st.file_uploader("양식 선택 (다중 가능)", type=["xlsx", "xls"], accept_multiple_files=True, key="res_upload")
+    uploaded_res_files = st.file_uploader("양식 선택", type=["xlsx", "xls"], accept_multiple_files=True, key="res_upload")
     res_file_list = []
     if uploaded_res_files:
         file_display_names_res = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded_res_files)]
-        st.caption("▼ 드래그하여 순서 조정")
         sorted_names_res = sort_items(file_display_names_res)
         for name in sorted_names_res:
             orig = name.split(". ", 1)[1]
@@ -79,71 +74,63 @@ if src_file_list and res_file_list:
         src_f = convert_xls_to_xlsx(src_f_raw)
         res_f = convert_xls_to_xlsx(res_f_raw)
         
-        target_name = src_f_raw.name.upper()
-        is_83_mode = "83" in target_name
+        # [판별] 원본 파일명 기반 (유형 선택)
+        src_upper = src_f_raw.name.upper()
+        # [판별] 양식 파일명 기반 (83/23 버전 선택)
+        res_upper = res_f_raw.name.upper()
+        
+        is_83_mode = "83" in res_upper
         mode_label = "83 알러지" if is_83_mode else "23 알러지"
         
         try:
             wb_s = load_workbook(src_f, data_only=True)
             wb_r = load_workbook(res_f, data_only=True)
             
-            ws_s = wb_s[next((s for s in wb_s.sheetnames if 'ALLERGEN' in s.upper() or 'Sheet' in s), wb_s.sheetnames[0])]
-            ws_r = wb_r[next((s for s in wb_r.sheetnames if 'ALLERGY' in s.upper()), wb_r.sheetnames[0])]
+            # 시트 선택 (첫 번째 시트 고정)
+            ws_s = wb_s.worksheets[0]
+            ws_r = wb_r.worksheets[0]
 
             s_map, r_map = {}, {}
             
-            # --- 원본(Source) 데이터 추출 ---
-            if is_83_mode:
-                # [수정] HPD 판별 로직 추가
-                if "HPD" in target_name:
-                    p_name, p_date = str(ws_s['C10'].value or "N/A"), str(ws_s['HI10'].value or "N/A").split(' ')[0]
-                    for r in range(17, 99): # 17행부터 98행까지
-                        c = get_cas_set(ws_s.cell(row=r, column=3).value) # CAS번호: C열
-                        v = ws_s.cell(row=r, column=6).value             # 수치: F열
-                        if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=2).value, "v": float(v)}
-                elif "HP" in target_name:
-                    p_name, p_date = str(ws_s['B10'].value or "N/A"), str(ws_s['E10'].value or "N/A").split(' ')[0]
-                    for r in range(1, 401):
-                        c = get_cas_set(ws_s.cell(row=r, column=2).value)
-                        v = ws_s.cell(row=r, column=3).value
-                        if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=1).value, "v": float(v)}
-                else: # CFF
-                    p_name, p_date = str(ws_s['D7'].value or "N/A"), str(ws_s['N9'].value or "N/A").split(' ')[0]
-                    for r in range(13, 96):
-                        c = get_cas_set(ws_s.cell(row=r, column=6).value)
-                        v = ws_s.cell(row=r, column=12).value
-                        if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=2).value, "v": float(v)}
-            else:
-                # 23 알러지 로직
-                p_name, p_date = str(ws_s['B12'].value or "N/A"), str(ws_s['E13'].value or "N/A").split(' ')[0]
-                for r in range(18, 44):
-                    c = get_cas_set(ws_s.cell(row=r, column=2).value)
-                    v = ws_s.cell(row=r, column=3).value
-                    if c and v is not None and v != 0: s_map[c] = {"n": "물질(23)", "v": float(v)}
+            # --- 1. 원본(Source) 데이터 추출 ---
+            if "HPD" in src_upper:
+                p_name, p_date = str(ws_s['C10'].value or "N/A"), str(ws_s['HI10'].value or "N/A").split(' ')[0]
+                for r in range(17, 99):
+                    c = get_cas_set(ws_s.cell(row=r, column=3).value) # C열
+                    v = ws_s.cell(row=r, column=6).value             # F열
+                    if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=2).value, "v": float(v)}
+            elif "HP" in src_upper:
+                p_name, p_date = str(ws_s['B10'].value or "N/A"), str(ws_s['E10'].value or "N/A").split(' ')[0]
+                for r in range(1, 401):
+                    c = get_cas_set(ws_s.cell(row=r, column=2).value) # B열
+                    v = ws_s.cell(row=r, column=3).value             # C열
+                    if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=1).value, "v": float(v)}
+            else: # CFF (나머지)
+                p_name, p_date = str(ws_s['D7'].value or "N/A"), str(ws_s['N9'].value or "N/A").split(' ')[0]
+                for r in range(13, 96):
+                    c = get_cas_set(ws_s.cell(row=r, column=6).value) # F열
+                    v = ws_s.cell(row=r, column=12).value            # L열
+                    if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=2).value, "v": float(v)}
 
-            # --- 양식(Result) 데이터 추출 --- (기존 로직 유지)
+            # --- 2. 양식(Result) 데이터 추출 ---
             if is_83_mode:
+                # 83 양식 위치 (HP와 동일한 B10, E10)
                 rp_name, rp_date = str(ws_r['B10'].value or "N/A"), str(ws_r['E10'].value or "N/A").split(' ')[0]
                 for r in range(1, 401):
                     c = get_cas_set(ws_r.cell(row=r, column=2).value)
                     v = ws_r.cell(row=r, column=3).value
                     if c and v is not None and v != 0: r_map[c] = {"n": ws_r.cell(row=r, column=1).value, "v": float(v)}
             else:
+                # 23 양식 위치 (B12, E13, 18~43행)
                 rp_name, rp_date = str(ws_r['B12'].value or "N/A"), str(ws_r['E13'].value or "N/A").split(' ')[0]
                 for r in range(18, 44):
-                    c = get_cas_set(ws_r.cell(row=r, column=2).value)
-                    v = ws_r.cell(row=r, column=3).value
+                    c = get_cas_set(ws_r.cell(row=r, column=2).value) # B열
+                    v = ws_r.cell(row=r, column=3).value             # C열
                     if c and v is not None and v != 0: r_map[c] = {"n": "물질(23)", "v": float(v)}
 
-            # 파일명-제품명 일치 여부 확인
-            src_name_check = check_name_match(src_f_raw.name, p_name)
-            res_name_check = check_name_match(res_f_raw.name, rp_name)
-
-            # --- 데이터 대조 로직 ---
-            rows = []
-            mismatch = 0
-            all_s_cas = list(s_map.keys())
-            all_r_cas = list(r_map.keys())
+            # --- 3. 데이터 대조 ---
+            rows, mismatch = [], 0
+            all_s_cas, all_r_cas = list(s_map.keys()), list(r_map.keys())
             matched_r_cas = set()
             
             for s_cas in all_s_cas:
@@ -163,16 +150,14 @@ if src_file_list and res_file_list:
                     mismatch += 1
                     rows.append({"번호": len(rows)+1, "CAS": ", ".join(list(r_cas)), "물질명": r_map[r_cas]['n'], "원본": "누락", "양식": r_map[r_cas]['v'], "상태": "❌"})
 
-            # --- 접이식 결과 섹션 ---
+            # 결과 출력
             status_icon = "✅" if mismatch == 0 else "❌"
             expander_title = f"{status_icon} [{idx+1}번] {mode_label} | {src_f_raw.name} (불일치: {mismatch}건)"
             
             with st.expander(expander_title):
                 m1, m2 = st.columns(2)
-                with m1:
-                    st.success(f"**원본 제품명:** {p_name} ({src_name_check})  \n**원본 작성일:** {p_date}")
-                with m2:
-                    st.info(f"**양식 제품명:** {rp_name} ({res_name_check})  \n**양식 작성일:** {rp_date}")
+                with m1: st.success(f"**원본 제품명:** {p_name} ({check_name_match(src_f_raw.name, p_name)}) \n**원본 작성일:** {p_date}")
+                with m2: st.info(f"**양식 제품명:** {rp_name} ({check_name_match(res_f_raw.name, rp_name)}) \n**양식 작성일:** {rp_date}")
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
             wb_s.close(); wb_r.close()
@@ -180,6 +165,7 @@ if src_file_list and res_file_list:
             st.error(f"{idx+1}번 파일 처리 중 오류: {e}")
 
     if len(src_file_list) != len(res_file_list):
-        st.warning("⚠️ 원본과 양식의 파일 개수가 일치하지 않습니다.")
+        st.warning("⚠️ 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
+
