@@ -8,10 +8,29 @@ from streamlit_sortables import sort_items
 # 1. 화면 설정
 st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 
-# [추가] 목록을 한 줄에 하나씩 나오게 강제하는 CSS
+# [수정] 파일 업로더 레이아웃 보정 및 목록 세로 정렬 CSS
 st.markdown("""
     <style>
-    /* sortable 아이템들이 가로로 나열되지 않고 세로로 꽉 차게 설정 */
+    /* 1. 파일 업로더 내부 요소가 배경 밖으로 나가지 않도록 조정 */
+    [data-testid="stFileUploader"] {
+        width: 100%;
+    }
+    [data-testid="stFileUploaderDropzone"] {
+        padding: 1rem;  /* 내부 여유 공간 확보 */
+        min-height: 150px;
+    }
+    /* 업로더 내부의 글씨 크기 및 간격 최적화 */
+    [data-testid="stFileUploaderDropzone"] div div {
+        gap: 0.5rem;
+    }
+    [data-testid="stFileUploaderDropzone"] small {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* 2. 정렬 목록(sort_items) 세로 꽉 차게 설정 */
     div[data-testid="stHorizontalBlock"] div div div div {
         display: block !important;
         width: 100% !important;
@@ -65,7 +84,6 @@ with col1:
     src_file_list = []
     if uploaded_src_files:
         file_display_names = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded_src_files)]
-        # sort_items가 리스트를 반환할 때 각 항목이 block이 되도록 설정
         sorted_names = sort_items(file_display_names, direction="vertical", key="src_sort")
         for name in sorted_names:
             orig = name.split(". ", 1)[1]
@@ -77,7 +95,6 @@ with col2:
     res_file_list = []
     if uploaded_res_files:
         file_display_names_res = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded_res_files)]
-        # direction="vertical"을 명시하여 세로 나열 강제
         sorted_names_res = sort_items(file_display_names_res, direction="vertical", key="res_sort")
         for name in sorted_names_res:
             orig = name.split(". ", 1)[1]
