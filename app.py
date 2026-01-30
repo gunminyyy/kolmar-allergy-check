@@ -67,7 +67,7 @@ if src_file_list and res_file_list:
         src_f = src_file_list[idx]
         res_f = res_file_list[idx]
         
-        # [수정됨] 파일명에 HP 또는 HPD가 있으면 "HP" 모드(한빛 로직)로 설정
+        # [유지됨] 파일명에 HP 또는 HPD가 있으면 "HP" 모드(한빛 로직)로 설정
         target_name = src_f.name.upper()
         mode = "HP" if ("HP" in target_name or "HPD" in target_name) else "CFF"
         
@@ -87,7 +87,7 @@ if src_file_list and res_file_list:
                     v = ws_s.cell(row=r, column=12).value
                     if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=2).value, "v": float(v)}
             
-            # HP(한빛) 로직 - HPD도 여기로 들어옴
+            # HP(한빛) 로직 - HPD 포함
             else:
                 p_name, p_date = str(ws_s['B10'].value or "N/A"), str(ws_s['E10'].value or "N/A").split(' ')[0]
                 for r in range(1, 401):
@@ -135,6 +135,3 @@ if src_file_list and res_file_list:
         st.warning("⚠️ 원본과 양식의 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
-
-
-
