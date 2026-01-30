@@ -68,7 +68,7 @@ files_A, files_B, files_C = [], [], []
 if mode == "원본 vs 83알러지 vs 26알러지":
     col1, col2, col3 = st.columns(3)
     cols = [col1, col2, col3]
-    labels = ["1. 원본", "2. 83알러지", "3. 26알러지"]
+    labels = ["원본", "83알러지", "26알러지"]
 else:
     col1, col2 = st.columns(2)
     cols = [col1, col2]
@@ -207,4 +207,5 @@ if ready:
             st.error(f"{idx+1}번 처리 오류: {e}")
 else:
     st.info("검토할 파일들을 모두 업로드해 주세요.")
+
 
