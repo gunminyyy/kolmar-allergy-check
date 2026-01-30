@@ -6,7 +6,7 @@ import io
 from streamlit_sortables import sort_items
 
 # 1. 화면 설정
-st.set_page_config(page_title="콜 83 알러지 통합 검토", layout="wide")
+st.set_page_config(page_title="콜마 83 알러지 통합 검토", layout="wide")
 
 # 2. 공통 도구 함수
 def get_cas_set(cas_val):
@@ -135,4 +135,5 @@ if src_file_list and res_file_list:
         st.warning("⚠️ 원본과 양식의 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
+
 
