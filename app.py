@@ -6,7 +6,7 @@ import io
 from streamlit_sortables import sort_items
 
 # 1. 화면 설정
-st.set_page_config(page_title="콜마 알러지 통합 검토", layout="wide")
+st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 
 # 2. 공통 도구 함수
 def get_cas_set(cas_val):
@@ -23,8 +23,8 @@ def check_name_match(file_name, product_name):
     return "❌ 불일치"
 
 # 3. 메인 UI 구성
-st.title("콜마 ALLERGENS 통합 검토 시스템(83/23)")
-st.info("원본과 양식 파일을 **동일한 순번**으로 배치하세요. 파일명에 '83' 포함 여부에 따라 양식이 자동 선택됩니다.")
+st.title("ALLERGENS 자료 통합 검토 시스템(HP/CFF)")
+st.info("원본과 양식 파일을 **동일한 순번**으로 배치하세요. 순서대로 매칭되어 검토가 진행됩니다.")
 
 st.markdown("---")
 
@@ -174,3 +174,4 @@ if src_file_list and res_file_list:
         st.warning("⚠️ 원본과 양식의 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
+
