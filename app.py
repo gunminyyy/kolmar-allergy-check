@@ -8,6 +8,15 @@ from streamlit_sortables import sort_items
 # 1. 화면 설정
 st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 
+# 23 알러지 양식 검토 대상 CAS 리스트 (26종)
+TARGET_23_CAS = {
+    "127-51-5", "122-40-7", "101-85-9", "105-13-5", "100-51-6",
+    "120-51-4", "103-41-3", "118-58-1", "104-55-2", "104-54-1",
+    "5392-40-5", "106-22-9", "91-64-5", "5989-27-5", "97-53-0",
+    "4602-84-0", "106-24-1", "101-86-0", "107-75-5", "97-54-1",
+    "78-70-6", "31906-04-4", "80-54-6", "111-12-6", "90028-68-5", "90028-67-4"
+}
+
 def convert_xls_to_xlsx(uploaded_file):
     if uploaded_file.name.lower().endswith('.xls'):
         df_dict = pd.read_excel(uploaded_file, sheet_name=None, engine='xlrd')
@@ -121,11 +130,21 @@ if src_file_list and res_file_list:
                 for r in range(18, 44):
                     c = get_cas_set(ws_r.cell(row=r, column=2).value)
                     v = ws_r.cell(row=r, column=3).value
-                    if c and v is not None and v != 0: r_map[c] = {"n": "물질(23)", "v": float(v)}
+                    if c and v is not None and v != 0: r_map[c] = {"n": ws_r.cell(row=r, column=1).value or "지정성분", "v": float(v)}
 
-            # --- 3. 데이터 대조 ---
+            # --- 3. 데이터 필터링 (23 알러지 모드 전용) ---
+            if not is_83_mode:
+                filtered_s_map = {}
+                for cas_set, data in s_map.items():
+                    # 원본 성분의 CAS 중 하나라도 26종 리스트에 포함되어 있다면 유지
+                    if not cas_set.isdisjoint(TARGET_23_CAS):
+                        filtered_s_map[cas_set] = data
+                s_map = filtered_s_map
+
+            # --- 4. 데이터 대조 ---
             rows, mismatch = [], 0
-            all_s_cas, all_r_cas = list(s_map.keys()), list(r_map.keys())
+            all_s_cas = list(s_map.keys())
+            all_r_cas = list(r_map.keys())
             matched_r_cas = set()
             
             for s_cas in all_s_cas:
@@ -150,13 +169,12 @@ if src_file_list and res_file_list:
             
             with st.expander(expander_title):
                 m1, m2 = st.columns(2)
-                # 제품명과 작성일 2줄로 단순화
                 with m1: 
                     st.success(f"**원본 제품명:** {p_name} ({check_name_match(src_f_raw.name, p_name)})\n\n**원본 작성일:** {p_date}")
                 with m2: 
                     st.info(f"**양식 제품명:** {rp_name} ({check_name_match(res_f_raw.name, rp_name)})\n\n**양식 작성일:** {rp_date}")
                 
-                st.markdown("") # 여백용
+                st.markdown("") 
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
             wb_s.close(); wb_r.close()
