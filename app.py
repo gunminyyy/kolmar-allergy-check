@@ -91,7 +91,7 @@ def extract_data(file_raw, is_23=False, is_83=False):
 st.title("ALLERGENS 자료 통합 검토 시스템(HP/CFF)")
 
 mode = st.radio("검토 방식 선택", ["원본 vs 83알러지", "원본 vs 26알러지", "83알러지 vs 26알러지", "원본 vs 83알러지 vs 26알러지"], horizontal=True)
-st.info("파일들을 **동일한 순번**으로 배치하세요.")
+st.info("파일들을 **동일한 순번**으로 배치하세요. 동일 순번끼리 매칭되어 검토합니다.")
 st.markdown("---")
 
 files_A, files_B, files_C = [], [], []
@@ -184,3 +184,4 @@ if ready:
             st.error(f"{idx+1}번 처리 오류: {e}")
 else:
     st.info("검토할 파일들을 모두 업로드해 주세요.")
+
