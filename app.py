@@ -38,7 +38,7 @@ def check_name_match(file_name, product_name):
 
 # 3. 메인 UI 구성
 st.title("ALLERGENS 자료 통합 검토 시스템(HP/CFF)")
-st.info("원본과 양식 파일을 **동일한 순번**으로 배치하세요. .xls와 .xlsx 모두 지원합니다.")
+st.info("원본과 양식 파일을 **동일한 순번**으로 배치하세요. 동일한 순번끼리 매칭해 검토를 시작합니다.")
 
 st.markdown("---")
 
@@ -184,3 +184,4 @@ if src_file_list and res_file_list:
         st.warning("⚠️ 원본과 양식의 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
+
