@@ -64,34 +64,36 @@ def extract_data(file_raw, is_23=False, is_83=False):
     data_map = {}
     product_name = "알 수 없음"
     
+    # --- 제품명 추출 로직 수정 ---
     if is_83: # 83알러지 양식
-        product_name = ws.cell(row=10, column=2).value or "제품명 누락" # B10
+        product_name = ws.cell(row=10, column=2).value # B10
         for r in range(1, 401):
             c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
             if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": float(v)}
     elif is_23: # 26종 알러지 양식
-        product_name = ws.cell(row=12, column=2).value or "제품명 누락" # B12
+        product_name = ws.cell(row=12, column=2).value # B12
         for r in range(18, 44):
             c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
             if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value or "지정성분", "v": float(v)}
     else: # 원본
         if "HPD" in name_upper:
-            product_name = ws.cell(row=10, column=3).value or "제품명 누락" # C10
+            product_name = ws.cell(row=10, column=3).value # C10
             for r in range(17, 99):
                 c, v = get_cas_set(ws.cell(row=r, column=3).value), ws.cell(row=r, column=6).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
         elif "HP" in name_upper:
-            product_name = ws.cell(row=10, column=2).value or "제품명 누락" # B10
+            product_name = ws.cell(row=10, column=2).value # B10
             for r in range(1, 401):
                 c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": float(v)}
         else: # CFF
-            product_name = ws.cell(row=7, column=4).value or "제품명 누락" # D7
+            product_name = ws.cell(row=7, column=4).value # D7
             for r in range(13, 96):
                 c, v = get_cas_set(ws.cell(row=r, column=6).value), ws.cell(row=r, column=12).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
+    
     wb.close()
-    return str(product_name).strip(), data_map
+    return str(product_name).strip() if product_name else file_raw.name, data_map
 
 # 3. 메인 UI 구성
 st.title("ALLERGENS 자료 통합 검토 시스템(HP/CFF)")
@@ -126,12 +128,22 @@ if ready:
     
     for idx in range(num_pairs):
         try:
-            # 첫 번째 파일(label[0])의 제품명을 대표 이름으로 사용
-            p_name, m1 = extract_data(files_A[idx], is_23=("26알러지" in labels[0]), is_83=("83알러지" in labels[0]))
-            _, m2 = extract_data(files_B[idx], is_23=("26알러지" in labels[1]), is_83=("83알러지" in labels[1]))
+            # --- 수정 포인트: 제목으로 사용할 제품명은 '원본'이 아닌 '83/26알러지 양식'에서 우선 추출하도록 순서 조정 ---
+            # m1 데이터 추출
+            p_name_1, m1 = extract_data(files_A[idx], is_23=("26알러지" in labels[0]), is_83=("83알러지" in labels[0]))
+            # m2 데이터 추출
+            p_name_2, m2 = extract_data(files_B[idx], is_23=("26알러지" in labels[1]), is_83=("83알러지" in labels[1]))
+            
             m3 = None
+            p_name_3 = None
             if mode == "원본 vs 83알러지 vs 26알러지":
-                _, m3 = extract_data(files_C[idx], is_23=True)
+                p_name_3, m3 = extract_data(files_C[idx], is_23=True)
+
+            # 대표 제품명 결정 (83알러지나 26알러지 양식에 적힌 이름을 우선순위로 사용)
+            # labels 순서에 따라 양식 파일이 있는 쪽의 이름을 가져옵니다.
+            display_p_name = p_name_2 if "알러지" in labels[1] else p_name_1
+            if mode == "원본 vs 83알러지 vs 26알러지":
+                display_p_name = p_name_2 # 보통 83알러지가 2번째 컬럼이므로
 
             if "26알러지" in mode:
                 m1 = {cas: d for cas, d in m1.items() if not cas.isdisjoint(TARGET_23_CAS)}
@@ -185,8 +197,8 @@ if ready:
             total_row["상태"] = "✅" if total_match else "❌"
             rows.append(total_row)
 
-            # 제목을 추출한 제품명(p_name)으로 표시
-            st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {p_name}").dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            # 미리보기 제목을 양식에서 추출한 이름(display_p_name)으로 설정
+            st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {display_p_name}").dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
         except Exception as e:
             st.error(f"{idx+1}번 처리 오류: {e}")
