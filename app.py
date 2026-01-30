@@ -66,7 +66,10 @@ if src_file_list and res_file_list:
     for idx in range(num_pairs):
         src_f = src_file_list[idx]
         res_f = res_file_list[idx]
-        mode = "HP" if "HP" in src_f.name.upper() else "CFF"
+        
+        # [수정됨] 파일명에 HP 또는 HPD가 있으면 "HP" 모드(한빛 로직)로 설정
+        target_name = src_f.name.upper()
+        mode = "HP" if ("HP" in target_name or "HPD" in target_name) else "CFF"
         
         try:
             wb_s = load_workbook(src_f, data_only=True)
@@ -75,12 +78,16 @@ if src_file_list and res_file_list:
             ws_r = wb_r[next((s for s in wb_r.sheetnames if 'ALLERGY' in s.upper()), wb_r.sheetnames[0])]
 
             s_map, r_map = {}, {}
+            
+            # CFF 로직
             if mode == "CFF":
                 p_name, p_date = str(ws_s['D7'].value or "N/A"), str(ws_s['N9'].value or "N/A").split(' ')[0]
                 for r in range(13, 96):
                     c = get_cas_set(ws_s.cell(row=r, column=6).value)
                     v = ws_s.cell(row=r, column=12).value
                     if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=2).value, "v": float(v)}
+            
+            # HP(한빛) 로직 - HPD도 여기로 들어옴
             else:
                 p_name, p_date = str(ws_s['B10'].value or "N/A"), str(ws_s['E10'].value or "N/A").split(' ')[0]
                 for r in range(1, 401):
@@ -128,6 +135,6 @@ if src_file_list and res_file_list:
         st.warning("⚠️ 원본과 양식의 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
-    st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
+
 
 
