@@ -33,7 +33,7 @@ def check_name_match(file_name, product_name):
 
 # 3. 메인 UI 구성
 st.title("ALLERGENS 자료 통합 검토 시스템(HP/CFF/CFF)")
-st.info("원본과 양식 파일을 **동일한 순번**으로 배치하세요. 양식 파일명에 '83' 포함 여부로 버전을 판별합니다.")
+st.info("검토할 원본과 양식 파일을 **동일한 순번**으로 배치하세요.")
 
 st.markdown("---")
 
@@ -74,9 +74,7 @@ if src_file_list and res_file_list:
         src_f = convert_xls_to_xlsx(src_f_raw)
         res_f = convert_xls_to_xlsx(res_f_raw)
         
-        # [판별] 원본 파일명 기반 (유형 선택)
         src_upper = src_f_raw.name.upper()
-        # [판별] 양식 파일명 기반 (83/23 버전 선택)
         res_upper = res_f_raw.name.upper()
         
         is_83_mode = "83" in res_upper
@@ -86,7 +84,6 @@ if src_file_list and res_file_list:
             wb_s = load_workbook(src_f, data_only=True)
             wb_r = load_workbook(res_f, data_only=True)
             
-            # 시트 선택 (첫 번째 시트 고정)
             ws_s = wb_s.worksheets[0]
             ws_r = wb_r.worksheets[0]
 
@@ -94,38 +91,37 @@ if src_file_list and res_file_list:
             
             # --- 1. 원본(Source) 데이터 추출 ---
             if "HPD" in src_upper:
-                p_name, p_date = str(ws_s['C10'].value or "N/A"), str(ws_s['HI10'].value or "N/A").split(' ')[0]
+                # [수정] HI10 병합셀의 데이터는 H10에서 추출
+                p_name, p_date = str(ws_s['C10'].value or "N/A"), str(ws_s['H10'].value or "N/A").split(' ')[0]
                 for r in range(17, 99):
-                    c = get_cas_set(ws_s.cell(row=r, column=3).value) # C열
-                    v = ws_s.cell(row=r, column=6).value             # F열
+                    c = get_cas_set(ws_s.cell(row=r, column=3).value)
+                    v = ws_s.cell(row=r, column=6).value
                     if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=2).value, "v": float(v)}
             elif "HP" in src_upper:
                 p_name, p_date = str(ws_s['B10'].value or "N/A"), str(ws_s['E10'].value or "N/A").split(' ')[0]
                 for r in range(1, 401):
-                    c = get_cas_set(ws_s.cell(row=r, column=2).value) # B열
-                    v = ws_s.cell(row=r, column=3).value             # C열
+                    c = get_cas_set(ws_s.cell(row=r, column=2).value)
+                    v = ws_s.cell(row=r, column=3).value
                     if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=1).value, "v": float(v)}
-            else: # CFF (나머지)
+            else: # CFF
                 p_name, p_date = str(ws_s['D7'].value or "N/A"), str(ws_s['N9'].value or "N/A").split(' ')[0]
                 for r in range(13, 96):
-                    c = get_cas_set(ws_s.cell(row=r, column=6).value) # F열
-                    v = ws_s.cell(row=r, column=12).value            # L열
+                    c = get_cas_set(ws_s.cell(row=r, column=6).value)
+                    v = ws_s.cell(row=r, column=12).value
                     if c and v is not None and v != 0: s_map[c] = {"n": ws_s.cell(row=r, column=2).value, "v": float(v)}
 
             # --- 2. 양식(Result) 데이터 추출 ---
             if is_83_mode:
-                # 83 양식 위치 (HP와 동일한 B10, E10)
                 rp_name, rp_date = str(ws_r['B10'].value or "N/A"), str(ws_r['E10'].value or "N/A").split(' ')[0]
                 for r in range(1, 401):
                     c = get_cas_set(ws_r.cell(row=r, column=2).value)
                     v = ws_r.cell(row=r, column=3).value
                     if c and v is not None and v != 0: r_map[c] = {"n": ws_r.cell(row=r, column=1).value, "v": float(v)}
             else:
-                # 23 양식 위치 (B12, E13, 18~43행)
                 rp_name, rp_date = str(ws_r['B12'].value or "N/A"), str(ws_r['E13'].value or "N/A").split(' ')[0]
                 for r in range(18, 44):
-                    c = get_cas_set(ws_r.cell(row=r, column=2).value) # B열
-                    v = ws_r.cell(row=r, column=3).value             # C열
+                    c = get_cas_set(ws_r.cell(row=r, column=2).value)
+                    v = ws_r.cell(row=r, column=3).value
                     if c and v is not None and v != 0: r_map[c] = {"n": "물질(23)", "v": float(v)}
 
             # --- 3. 데이터 대조 ---
@@ -150,14 +146,19 @@ if src_file_list and res_file_list:
                     mismatch += 1
                     rows.append({"번호": len(rows)+1, "CAS": ", ".join(list(r_cas)), "물질명": r_map[r_cas]['n'], "원본": "누락", "양식": r_map[r_cas]['v'], "상태": "❌"})
 
-            # 결과 출력
+            # [수정] expander 타이틀을 양식 파일명(res_f_raw.name)으로 표시
             status_icon = "✅" if mismatch == 0 else "❌"
-            expander_title = f"{status_icon} [{idx+1}번] {mode_label} | {src_f_raw.name} (불일치: {mismatch}건)"
+            expander_title = f"{status_icon} [{idx+1}번] {mode_label} | {res_f_raw.name} (불일치: {mismatch}건)"
             
             with st.expander(expander_title):
                 m1, m2 = st.columns(2)
-                with m1: st.success(f"**원본 제품명:** {p_name} ({check_name_match(src_f_raw.name, p_name)}) \n**원본 작성일:** {p_date}")
-                with m2: st.info(f"**양식 제품명:** {rp_name} ({check_name_match(res_f_raw.name, rp_name)}) \n**양식 작성일:** {rp_date}")
+                # [수정] 줄바꿈과 구분을 위한 텍스트 포맷팅 개선
+                with m1: 
+                    st.success(f"**[원본 데이터 정보]**\n\n**제품명:** {p_name}\n\n**파일명 일치:** {check_name_match(src_f_raw.name, p_name)}\n\n--- \n\n**작성일:** {p_date}")
+                with m2: 
+                    st.info(f"**[양식 데이터 정보]**\n\n**제품명:** {rp_name}\n\n**파일명 일치:** {check_name_match(res_f_raw.name, rp_name)}\n\n--- \n\n**작성일:** {rp_date}")
+                
+                st.markdown("---")
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
             
             wb_s.close(); wb_r.close()
@@ -168,4 +169,3 @@ if src_file_list and res_file_list:
         st.warning("⚠️ 파일 개수가 일치하지 않습니다.")
 else:
     st.info("왼쪽과 오른쪽에 검토할 파일들을 업로드해 주세요.")
-
