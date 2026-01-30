@@ -8,6 +8,17 @@ from streamlit_sortables import sort_items
 # 1. 화면 설정
 st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 
+# [추가] 목록을 한 줄에 하나씩 나오게 강제하는 CSS
+st.markdown("""
+    <style>
+    /* sortable 아이템들이 가로로 나열되지 않고 세로로 꽉 차게 설정 */
+    div[data-testid="stHorizontalBlock"] div div div div {
+        display: block !important;
+        width: 100% !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # 23 알러지 양식 검토 대상 CAS 리스트 (26종)
 TARGET_23_CAS = {
     "127-51-5", "122-40-7", "101-85-9", "105-13-5", "100-51-6",
@@ -54,7 +65,8 @@ with col1:
     src_file_list = []
     if uploaded_src_files:
         file_display_names = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded_src_files)]
-        sorted_names = sort_items(file_display_names)
+        # sort_items가 리스트를 반환할 때 각 항목이 block이 되도록 설정
+        sorted_names = sort_items(file_display_names, direction="vertical", key="src_sort")
         for name in sorted_names:
             orig = name.split(". ", 1)[1]
             src_file_list.append(next(f for f in uploaded_src_files if f.name == orig))
@@ -65,7 +77,8 @@ with col2:
     res_file_list = []
     if uploaded_res_files:
         file_display_names_res = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded_res_files)]
-        sorted_names_res = sort_items(file_display_names_res)
+        # direction="vertical"을 명시하여 세로 나열 강제
+        sorted_names_res = sort_items(file_display_names_res, direction="vertical", key="res_sort")
         for name in sorted_names_res:
             orig = name.split(". ", 1)[1]
             res_file_list.append(next(f for f in uploaded_res_files if f.name == orig))
@@ -136,7 +149,6 @@ if src_file_list and res_file_list:
             if not is_83_mode:
                 filtered_s_map = {}
                 for cas_set, data in s_map.items():
-                    # 원본 성분의 CAS 중 하나라도 26종 리스트에 포함되어 있다면 유지
                     if not cas_set.isdisjoint(TARGET_23_CAS):
                         filtered_s_map[cas_set] = data
                 s_map = filtered_s_map
