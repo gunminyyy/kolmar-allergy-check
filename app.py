@@ -206,7 +206,12 @@ if ready:
             total_row["상태"] = "✅" if total_match else "❌"
             rows.append(total_row)
 
-            st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {display_p_name}").dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            # [수정된 부분] .style.set_properties(**{'text-align': 'left'}) 를 추가하여 왼쪽 정렬 강제 적용
+            st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {display_p_name}").dataframe(
+                pd.DataFrame(rows).style.set_properties(**{'text-align': 'left'}), 
+                use_container_width=True, 
+                hide_index=True
+            )
             
         except Exception as e:
             st.error(f"{idx+1}번 처리 오류: {e}")
