@@ -3,6 +3,8 @@ import pandas as pd
 import re
 from openpyxl import load_workbook
 import io
+import os
+import time
 from streamlit_sortables import sort_items
 
 # 1. 화면 설정
@@ -17,6 +19,15 @@ st.markdown("""
     div[data-testid="stHorizontalBlock"] div div div div { display: block !important; width: 100% !important; }
     </style>
     """, unsafe_allow_html=True)
+
+# --- [종료 버튼 기능] ---
+with st.sidebar:
+    st.write("---")
+    if st.button("❌ 프로그램 종료", type="primary"):
+        st.warning("프로그램을 종료합니다. 창을 닫으셔도 됩니다.")
+        time.sleep(1)
+        os._exit(0) # 프로세스 강제 종료
+# -----------------------
 
 # 23(26종) 알러지 양식 검토 대상 CAS 리스트
 TARGET_23_CAS = {
@@ -64,41 +75,38 @@ def extract_data(file_raw, is_23=False, is_83=False):
     data_map = {}
     product_name = "알 수 없음"
     
-    # --- 새로운 양식 판별 조건 추가 ---
     val_a1 = str(ws.cell(row=1, column=1).value or "").strip()
     val_b1 = str(ws.cell(row=1, column=2).value or "").strip()
     
     if val_a1 == "성분코드" and val_b1 == "성분국문명":
-        # 새로운 83알러지 양식 로직: F열(CAS), H열(함량)
         product_name = file_raw.name
-        for r in range(2, 85): # 2행부터 84행까지
+        for r in range(2, 85):
             c, v = get_cas_set(ws.cell(row=r, column=6).value), ws.cell(row=r, column=8).value
             if c and v is not None and v != 0: 
                 data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
-    # ----------------------------
-    elif is_83: # 83알러지 양식
-        product_name = ws.cell(row=10, column=2).value # B10
+    elif is_83:
+        product_name = ws.cell(row=10, column=2).value
         for r in range(1, 401):
             c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
             if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": float(v)}
-    elif is_23: # 26종 알러지 양식
-        product_name = ws.cell(row=12, column=2).value # B12
+    elif is_23:
+        product_name = ws.cell(row=12, column=2).value
         for r in range(18, 44):
             c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
             if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value or "지정성분", "v": float(v)}
-    else: # 원본
+    else:
         if "HPD" in name_upper:
-            product_name = ws.cell(row=10, column=3).value # C10
+            product_name = ws.cell(row=10, column=3).value
             for r in range(17, 99):
                 c, v = get_cas_set(ws.cell(row=r, column=3).value), ws.cell(row=r, column=6).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
         elif "HP" in name_upper:
-            product_name = ws.cell(row=10, column=2).value # B10
+            product_name = ws.cell(row=10, column=2).value
             for r in range(1, 401):
                 c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": float(v)}
-        else: # CFF
-            product_name = ws.cell(row=7, column=4).value # D7
+        else:
+            product_name = ws.cell(row=7, column=4).value
             for r in range(13, 96):
                 c, v = get_cas_set(ws.cell(row=r, column=6).value), ws.cell(row=r, column=12).value
                 if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
@@ -149,7 +157,6 @@ if ready:
             if mode == "원본 vs 83알러지 vs 26알러지":
                 p_name_3, m3 = extract_data(files_C[idx], is_23=True)
 
-            # 대표 제품명 결정
             display_p_name = p_name_2 if "알러지" in labels[1] else p_name_1
             if mode == "원본 vs 83알러지 vs 26알러지":
                 display_p_name = p_name_2
@@ -206,9 +213,9 @@ if ready:
             total_row["상태"] = "✅" if total_match else "❌"
             rows.append(total_row)
 
-            # [수정된 부분] .style.set_properties(**{'text-align': 'left'}) 를 추가하여 왼쪽 정렬 강제 적용
+            # [수정됨] .astype(str)을 추가하여 숫자도 문자열로 변환 -> 강제 왼쪽 정렬
             st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {display_p_name}").dataframe(
-                pd.DataFrame(rows).style.set_properties(**{'text-align': 'left'}), 
+                pd.DataFrame(rows).astype(str).style.set_properties(**{'text-align': 'left'}), 
                 use_container_width=True, 
                 hide_index=True
             )
