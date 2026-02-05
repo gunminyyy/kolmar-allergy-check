@@ -60,18 +60,19 @@ def handle_upload(col, label, key):
         uploaded = st.file_uploader(f"{label} 선택", type=["xlsx", "xls"], accept_multiple_files=True, key=key)
         sorted_list = []
         if uploaded:
-            # 먼저 넣은 파일이 위로 오도록 업로드 순서 유지 (1, 2, 3...)
-            # 각 파일 이름 바로 왼쪽에 정렬 핸들(↕)을 배치하여 칸을 아끼고 직관성 상향
+            # 첫 번째 파일을 1번으로 표기하여 리스트 상단부터 배치
             display_items = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded)]
             
-            # 모든 항목에 핸들이 포함된 리스트를 정렬 컴포넌트에 전달
+            # 모든 항목 옆에 화살표 핸들이 표시되도록 함
             sorted_names = sort_items(display_items, direction="vertical", key=f"sort_{key}")
             
             for name in sorted_names:
-                # 핸들과 번호를 제외한 순수 파일명만 추출하여 원본 객체 매칭
                 try:
+                    # '↕ 1. 파일명' 구조에서 파일명만 추출하여 매칭
                     orig_name = name.split(". ", 1)[1]
-                    sorted_list.append(next(f for f in uploaded if f.name == orig_name))
+                    matched_file = next((f for f in uploaded if f.name == orig_name), None)
+                    if matched_file:
+                        sorted_list.append(matched_file)
                 except (IndexError, StopIteration):
                     continue
         return sorted_list
@@ -220,7 +221,7 @@ if ready:
             total_row["상태"] = "✅" if total_match else "❌"
             rows.append(total_row)
 
-            # 결과 표 출력: CAS 컬럼 너비 제한 및 말줄임 효과 유지
+            # 결과 표 출력: CAS 컬럼 너비 제한 및 툴팁 제공
             st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {display_p_name}").dataframe(
                 pd.DataFrame(rows).astype(str),
                 use_container_width=True, 
