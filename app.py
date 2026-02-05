@@ -10,13 +10,14 @@ from streamlit_sortables import sort_items
 # 1. 화면 설정
 st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 
-# [CSS] 파일 업로더 레이아웃 보정
+# [CSS] 파일 업로더 레이아웃 보정 및 CAS 칸 너비/숨김 스타일 추가
 st.markdown("""
     <style>
     [data-testid="stFileUploader"] { width: 100%; }
     [data-testid="stFileUploaderDropzone"] { padding: 1rem; min-height: 150px; }
     [data-testid="stFileUploaderDropzone"] small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     div[data-testid="stHorizontalBlock"] div div div div { display: block !important; width: 100% !important; }
+    /* 데이터프레임 내 CAS 컬럼 등에 대한 가독성 스타일은 st.dataframe의 내장 기능을 활용합니다 */
     </style>
     """, unsafe_allow_html=True)
 
@@ -60,11 +61,18 @@ def handle_upload(col, label, key):
         uploaded = st.file_uploader(f"{label} 선택", type=["xlsx", "xls"], accept_multiple_files=True, key=key)
         sorted_list = []
         if uploaded:
-            display_names = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded)]
-            sorted_names = sort_items(display_names, direction="vertical", key=f"sort_{key}")
-            for name in sorted_names:
-                orig = name.split(". ", 1)[1]
-                sorted_list.append(next(f for f in uploaded if f.name == orig))
+            # 업로드된 순서를 유지하며 핸들(↕)과 번호를 모든 파일에 부여
+            display_items = [
+                {"id": f.name, "content": f"↕ {i+1}. {f.name}"} 
+                for i, f in enumerate(uploaded)
+            ]
+            # 모든 항목에 대해 정렬 가능하도록 items 인자 전달
+            sorted_output = sort_items(display_items, direction="vertical", key=f"sort_{key}")
+            
+            for item in sorted_output:
+                # item이 딕셔너리인 경우 id를 통해 원본 파일을 찾음
+                orig_name = item["id"] if isinstance(item, dict) else item.split(". ", 1)[1]
+                sorted_list.append(next(f for f in uploaded if f.name == orig_name))
         return sorted_list
 
 def extract_data(file_raw, is_23=False, is_83=False):
@@ -195,6 +203,7 @@ if ready:
 
                 if not match: mismatch += 1
                 
+                # CAS 번호가 길 경우 데이터프레임에서 자동으로 말줄임표 처리되도록 문자열 전달
                 row_data = {"번호": len(rows)+1, "CAS": ", ".join(list(cas)), "물질명": name, labels[0]: v1, labels[1]: v2}
                 if m3 is not None: row_data[labels[2]] = v3
                 row_data["상태"] = "✅" if match else "❌"
@@ -213,11 +222,14 @@ if ready:
             total_row["상태"] = "✅" if total_match else "❌"
             rows.append(total_row)
 
-            # [수정됨] .astype(str)을 추가하여 숫자도 문자열로 변환 -> 강제 왼쪽 정렬
+            # 데이터프레임 출력 시 CAS 컬럼 너비 제한 및 말줄임 효과를 위해 column_config 사용
             st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {display_p_name}").dataframe(
-                pd.DataFrame(rows).astype(str).style.set_properties(**{'text-align': 'left'}), 
+                pd.DataFrame(rows).astype(str),
                 use_container_width=True, 
-                hide_index=True
+                hide_index=True,
+                column_config={
+                    "CAS": st.column_config.TextColumn("CAS", width="medium", help="마우스를 올리면 전체 CAS 번호가 보입니다.")
+                }
             )
             
         except Exception as e:
