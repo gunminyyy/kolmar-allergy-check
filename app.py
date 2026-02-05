@@ -88,41 +88,47 @@ def extract_data(file_raw, is_23=False, is_83=False):
     data_map = {}
     product_name = "알 수 없음"
     
+    # 수치 데이터 처리용 헬퍼 함수 (하이픈 대응)
+    def clean_val(v):
+        if v is None or str(v).strip() == "-": return 0.0
+        try: return float(v)
+        except: return 0.0
+
     val_a1 = str(ws.cell(row=1, column=1).value or "").strip()
     val_b1 = str(ws.cell(row=1, column=2).value or "").strip()
     
     if val_a1 == "성분코드" and val_b1 == "성분국문명":
         product_name = file_raw.name
         for r in range(2, 85):
-            c, v = get_cas_set(ws.cell(row=r, column=6).value), ws.cell(row=r, column=8).value
-            if c and v is not None and v != 0: 
-                data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
+            c, v = get_cas_set(ws.cell(row=r, column=6).value), clean_val(ws.cell(row=r, column=8).value)
+            if c and v != 0: 
+                data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": v}
     elif is_83:
         product_name = ws.cell(row=10, column=2).value
         for r in range(1, 401):
-            c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
-            if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": float(v)}
+            c, v = get_cas_set(ws.cell(row=r, column=2).value), clean_val(ws.cell(row=r, column=3).value)
+            if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": v}
     elif is_23:
         product_name = ws.cell(row=12, column=2).value
         for r in range(18, 44):
-            c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
-            if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value or "지정성분", "v": float(v)}
+            c, v = get_cas_set(ws.cell(row=r, column=2).value), clean_val(ws.cell(row=r, column=3).value)
+            if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value or "지정성분", "v": v}
     else:
         if "HPD" in name_upper:
             product_name = ws.cell(row=10, column=3).value
             for r in range(17, 99):
-                c, v = get_cas_set(ws.cell(row=r, column=3).value), ws.cell(row=r, column=6).value
-                if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
+                c, v = get_cas_set(ws.cell(row=r, column=3).value), clean_val(ws.cell(row=r, column=6).value)
+                if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": v}
         elif "HP" in name_upper:
             product_name = ws.cell(row=10, column=2).value
             for r in range(1, 401):
-                c, v = get_cas_set(ws.cell(row=r, column=2).value), ws.cell(row=r, column=3).value
-                if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": float(v)}
+                c, v = get_cas_set(ws.cell(row=r, column=2).value), clean_val(ws.cell(row=r, column=3).value)
+                if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": v}
         else:
             product_name = ws.cell(row=7, column=4).value
             for r in range(13, 96):
-                c, v = get_cas_set(ws.cell(row=r, column=6).value), ws.cell(row=r, column=12).value
-                if c and v is not None and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": float(v)}
+                c, v = get_cas_set(ws.cell(row=r, column=6).value), clean_val(ws.cell(row=r, column=12).value)
+                if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": v}
     
     wb.close()
     return str(product_name).strip() if product_name else file_raw.name, data_map
