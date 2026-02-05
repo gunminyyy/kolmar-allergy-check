@@ -10,12 +10,14 @@ from streamlit_sortables import sort_items
 # 1. 화면 설정
 st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 
-# [CSS] 파일 업로더 레이아웃 보정
+# [CSS] 파일 업로더 레이아웃 및 업로드 목록 숨김 처리 (중요!)
 st.markdown("""
     <style>
     [data-testid="stFileUploader"] { width: 100%; }
     [data-testid="stFileUploaderDropzone"] { padding: 1rem; min-height: 150px; }
-    [data-testid="stFileUploaderDropzone"] small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 기본 업로더 아래에 생기는 지저분한 파일 목록을 숨깁니다 */
+    [data-testid="stFileUploaderFileName"] { display: none; }
+    [data-testid="stFileUploaderFileData"] { display: none; }
     div[data-testid="stHorizontalBlock"] div div div div { display: block !important; width: 100% !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -60,15 +62,16 @@ def handle_upload(col, label, key):
         uploaded = st.file_uploader(f"{label} 선택", type=["xlsx", "xls"], accept_multiple_files=True, key=key)
         sorted_list = []
         if uploaded:
-            # 첫 번째 파일을 1번으로 표기하여 리스트 상단부터 배치
+            # 1. 파일 이름 리스트 생성 (먼저 업로드한 파일이 1번으로 위로 오게 함)
             display_items = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded)]
             
-            # 모든 항목 옆에 화살표 핸들이 표시되도록 함
-            sorted_names = sort_items(display_items, direction="vertical", key=f"sort_{key}")
+            # 2. 정렬 컴포넌트 실행 (빨간 박스가 모든 파일에 대해 생기도록 함)
+            # key값을 더 고유하게 만들어 렌더링 오류를 방지합니다.
+            sorted_names = sort_items(display_items, direction="vertical", key=f"sort_v3_{key}_{len(uploaded)}")
             
+            # 3. 정렬된 텍스트에서 원본 파일 객체 매칭
             for name in sorted_names:
                 try:
-                    # '↕ 1. 파일명' 구조에서 파일명만 추출하여 매칭
                     orig_name = name.split(". ", 1)[1]
                     matched_file = next((f for f in uploaded if f.name == orig_name), None)
                     if matched_file:
@@ -221,7 +224,7 @@ if ready:
             total_row["상태"] = "✅" if total_match else "❌"
             rows.append(total_row)
 
-            # 결과 표 출력: CAS 컬럼 너비 제한 및 툴팁 제공
+            # 결과 표 출력
             st.expander(f"{'✅' if mismatch == 0 else '❌'} [{idx+1}번] {display_p_name}").dataframe(
                 pd.DataFrame(rows).astype(str),
                 use_container_width=True, 
