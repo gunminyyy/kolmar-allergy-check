@@ -60,17 +60,20 @@ def handle_upload(col, label, key):
         uploaded = st.file_uploader(f"{label} 선택", type=["xlsx", "xls"], accept_multiple_files=True, key=key)
         sorted_list = []
         if uploaded:
-            # 에러 해결: list[str] 형태로만 구성하여 전달
-            # 업로드된 순서대로 1, 2, 3... 번호를 붙여 리스트 상단부터 표시
-            display_names = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded)]
+            # 먼저 넣은 파일이 위로 오도록 업로드 순서 유지 (1, 2, 3...)
+            # 각 파일 이름 바로 왼쪽에 정렬 핸들(↕)을 배치하여 칸을 아끼고 직관성 상향
+            display_items = [f"↕ {i+1}. {f.name}" for i, f in enumerate(uploaded)]
             
-            # 모든 파일 항목에 정렬 핸들이 표시되도록 함
-            sorted_names = sort_items(display_names, direction="vertical", key=f"sort_{key}")
+            # 모든 항목에 핸들이 포함된 리스트를 정렬 컴포넌트에 전달
+            sorted_names = sort_items(display_items, direction="vertical", key=f"sort_{key}")
             
             for name in sorted_names:
-                # 번호와 핸들을 떼어내고 순수 파일명만 추출하여 매칭
-                orig_name = name.split(". ", 1)[1]
-                sorted_list.append(next(f for f in uploaded if f.name == orig_name))
+                # 핸들과 번호를 제외한 순수 파일명만 추출하여 원본 객체 매칭
+                try:
+                    orig_name = name.split(". ", 1)[1]
+                    sorted_list.append(next(f for f in uploaded if f.name == orig_name))
+                except (IndexError, StopIteration):
+                    continue
         return sorted_list
 
 def extract_data(file_raw, is_23=False, is_83=False):
