@@ -1110,7 +1110,7 @@ def parse_pdf_final(doc, mode="CFF(K)"):
             "ENV": env_raw
         }
 
-    # [수정1] 15. 법적규제 섹션 탐색을 더 확실하게 보완 (추출 실패 방지용 무적 백업 로직 적용)
+    # [수정] 15. 법적규제 섹션 탐색을 더 확실하게 보완 (추출 실패 방지용 무적 백업 로직 적용)
     sec15_lines = []
     start_15 = -1; end_15 = -1
     for i, line in enumerate(all_lines):
@@ -1124,16 +1124,12 @@ def parse_pdf_final(doc, mode="CFF(K)"):
     else:
         sec15_lines = all_lines
         
-    danger_act_text = ""
-    for idx, l in enumerate(sec15_lines):
-        if "위험물안전관리법" in l['text'].replace(" ", ""):
-            for j in range(idx, min(idx + 15, len(sec15_lines))):
-                danger_act_text += sec15_lines[j]['text']
-                if "폐기물" in sec15_lines[j]['text'].replace(" ", ""):
-                    break
-            break
-
-    result["sec15"] = {"DANGER": danger_act_text}
+    danger_act = extract_section_smart(sec15_lines, "위험물안전관리법", ["마. 폐기물", "마.폐기물"], mode)
+    
+    result["sec15"] = {
+        "DANGER": danger_act,
+        "FULL_TEXT": "\n".join([l['text'] for l in all_lines])
+    }
 
     return result
 
@@ -1345,27 +1341,32 @@ with col_center:
 
                         dest_wb.external_links = []
                         
-                        # [수정2] 더미 GHS 그림문자(15~35행)만 정확히 타겟팅하여 삭제하고, 
-                        # 상단(1~5행) 배너 등 나머지 모든 이미지는 어떤 조건도 없이 100% 보존
+                        # [수정] A열(c=1)에 위치한 상단 배너 이미지는 100% 보존하고 B열(c=2) 15~35행의 더미 신호어 그림만 삭제
                         images_to_keep = []
                         for img in dest_ws._images:
                             is_dummy = False
                             try:
                                 r = -1
+                                c = -1
                                 if isinstance(img.anchor, str):
-                                    m = re.search(r'\d+', img.anchor)
-                                    if m: r = int(m.group())
+                                    m_r = re.search(r'\d+', img.anchor)
+                                    if m_r: r = int(m_r.group())
+                                    if 'B' in img.anchor.upper(): c = 2
                                 else:
                                     if hasattr(img.anchor, '_from'):
                                         r = img.anchor._from.row + 1
+                                        c = img.anchor._from.col + 1
                                     elif hasattr(img.anchor, 'from_'):
                                         r = img.anchor.from_.row + 1
+                                        c = img.anchor.from_.col + 1
                                 
-                                if 15 <= r <= 35:
+                                # B열(c=2)에 위치하고 15행~35행 사이에 있는 그림만 더미 그림으로 간주하여 삭제
+                                if 15 <= r <= 35 and c == 2:
                                     is_dummy = True
                             except:
                                 pass
                             
+                            # 더미가 아닌 이미지(A열 배너 등)는 무조건 보존
                             if not is_dummy:
                                 images_to_keep.append(img)
                                 
@@ -1627,7 +1628,7 @@ with col_center:
                             safe_write_force(dest_ws, 534, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 535, 2, env_val, center=False)
 
-                            today_eng = datetime.now().strftime("%d. %b. %Y").upper()
+                            today_eng = datetime.now().strftime("%d. %b. %Y")
                             safe_write_force(dest_ws, 544, 1, f"16.2 Date of Issue : {today_eng}", center=False)
                             
                             collected_pil_images = []
@@ -1799,10 +1800,15 @@ with col_center:
                             safe_write_force(dest_ws, 515, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 516, 2, env_val, center=False)
 
+                            # [수정] 15번 항목: 추출 실패 대비 전체 텍스트 검색 및 키워드 강력 매칭 (절대 실패 불가 로직)
                             s15 = parsed_data["sec15"]
                             
-                            # [수정1] 문서 전체에서 추출한 FULL_TEXT를 모두 연결하여 무조건 찾기
-                            danger_text = s15.get("DANGER", "").strip() + " " + s15.get("FULL_TEXT", "")
+                            danger_text = s15.get("DANGER", "").strip()
+                            full_text = s15.get("FULL_TEXT", "")
+                            
+                            idx = full_text.find("위험물안전관리법")
+                            if idx != -1:
+                                danger_text += " " + full_text[idx:idx+300] 
                                 
                             clean_danger = danger_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "").replace(".", "").replace(":", "")
                             
@@ -1860,8 +1866,7 @@ with col_center:
                                 img_byte_arr = io.BytesIO()
                                 merged_img.save(img_byte_arr, format='PNG')
                                 img_byte_arr.seek(0)
-                                # CFF(E)는 B22, 나머지는 B23
-                                dest_ws.add_image(XLImage(img_byte_arr), 'B22' if option=="CFF(E)" else 'B23') 
+                                dest_ws.add_image(XLImage(img_byte_arr), 'B22') 
 
                         dest_wb.external_links = []
                         output = io.BytesIO()
