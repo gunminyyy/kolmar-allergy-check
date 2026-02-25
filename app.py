@@ -1119,9 +1119,15 @@ def parse_pdf_final(doc, mode="CFF(K)"):
         if end_15 == -1: end_15 = len(all_lines)
         sec15_lines = all_lines[start_15:end_15]
     
-    # [수정] HP(K) 모드에서 PDF 추출 의존성을 완벽히 제거하기 위해 시작 키워드를 "위험물안전관리법"으로 통일
+    # [수정] 추출 함수가 실패해도 찾을 수 있도록 15번 섹션의 모든 줄을 강제로 통째로 백업
+    sec15_full_text = "\n".join([l['text'] for l in sec15_lines])
+    
     danger_act = extract_section_smart(sec15_lines, "위험물안전관리법", ["마. 폐기물", "마.폐기물"], mode)
-    result["sec15"] = {"DANGER": danger_act}
+    
+    result["sec15"] = {
+        "DANGER": danger_act,
+        "FULL_TEXT": sec15_full_text
+    }
 
     return result
 
@@ -1333,19 +1339,23 @@ with col_center:
 
                         dest_wb.external_links = []
                         
-                        # [수정] 상단 배너 이미지 보존 로직 (가로가 세로보다 3배 이상 큰 이미지는 배너로 간주)
+                        # [수정] 신호어 구역(15~35행)에 있는 더미 그림문자만 삭제하고 상단 배너 등 모든 다른 이미지는 완벽 보존
                         images_to_keep = []
                         for img in dest_ws._images:
                             try:
-                                if getattr(img, 'width', 0) > getattr(img, 'height', 0) * 3:
-                                    images_to_keep.append(img)
+                                r = None
+                                if hasattr(img, 'anchor') and img.anchor is not None:
+                                    if hasattr(img.anchor, '_from'):
+                                        r = img.anchor._from.row
+                                    elif hasattr(img.anchor, 'from'):
+                                        r = getattr(img.anchor, 'from').row
+                                
+                                if r is not None and 15 <= r <= 35:
+                                    continue
+                                images_to_keep.append(img)
                             except:
-                                pass
-                        
-                        # 안전장치: 조건에 맞는 배너를 찾지 못했더라도 무조건 첫 번째 이미지는 보존
-                        if not images_to_keep and dest_ws._images:
-                            images_to_keep.append(dest_ws._images[0])
-                            
+                                images_to_keep.append(img)
+                                
                         dest_ws._images = images_to_keep
 
                         for row in dest_ws.iter_rows():
@@ -1778,8 +1788,11 @@ with col_center:
 
                             s15 = parsed_data["sec15"]
                             
-                            # [수정] 15번 항목: 핵심 키워드("4류", "3석유류", "2000")를 모든 불순물 무시하고 안전하게 매칭
+                            # [수정] 추출 함수가 놓쳤을 때를 대비해 전체 텍스트에서 안전하게 키워드 매칭 백업
                             danger_text = s15.get("DANGER", "").strip()
+                            if not danger_text:
+                                danger_text = s15.get("FULL_TEXT", "")
+                                
                             clean_danger = danger_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "")
                             
                             is_target = ("4류" in clean_danger and "3석유류" in clean_danger and "2000" in clean_danger)
