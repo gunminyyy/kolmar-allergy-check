@@ -1110,27 +1110,9 @@ def parse_pdf_final(doc, mode="CFF(K)"):
             "ENV": env_raw
         }
 
-    # [수정1] 15. 법적규제 섹션을 좀 더 유연하게 탐색하고 못 찾으면 전체 텍스트 백업 (B521 완벽 대응)
-    sec15_lines = []
-    start_15 = -1; end_15 = -1
-    for i, line in enumerate(all_lines):
-        clean_txt = line['text'].replace(" ", "")
-        if "15.법적" in clean_txt: start_15 = i
-        if "16.그밖의" in clean_txt or "16.기타" in clean_txt: end_15 = i; break
-    
-    if start_15 != -1:
-        if end_15 == -1: end_15 = len(all_lines)
-        sec15_lines = all_lines[start_15:end_15]
-    else:
-        sec15_lines = all_lines
-        
-    danger_act_text = extract_section_smart(sec15_lines, "위험물안전관리법에 의한 규제", ["마. 폐기물", "마.폐기물"], mode)
-    if not danger_act_text:
-        danger_act_text = extract_section_smart(sec15_lines, "위험물안전관리법", ["마. 폐기물", "마.폐기물"], mode)
-
+    # [수정] 15. 법적규제 섹션의 내용 스캔. 만약의 사태를 대비하여 문서 전체 텍스트도 FULL_TEXT로 확보
     result["sec15"] = {
-        "DANGER": danger_act_text,
-        "FULL_TEXT": "\n".join([l['text'] for l in sec15_lines])
+        "FULL_TEXT": "\n".join([l['text'] for l in all_lines])
     }
 
     return result
@@ -1158,9 +1140,8 @@ refractive_index_input = ""
 if option in ["HP(K)", "HP(E)"]:
     refractive_index_input = st.text_input("굴절률 입력")
 
-# 셀 안에 그림 넣기로 인한 #VALUE 오류 안내문
 if option in ["CFF(K)", "HP(K)"]:
-    st.info("※ 엑셀 템플릿의 상단 배너 이미지는 반드시 **'셀 위로 띄우기(떠다니는 이미지)'**로 삽입해 주세요. '셀 안에 넣기' 기능은 변환 시 오류(#VALUE!)를 발생시킵니다.")
+    st.info("※ 엑셀 템플릿의 상단 배너 이미지는 반드시 **'셀 위로 띄우기(떠다니는 이미지)'**로 삽입해 주세요. (셀 안에 넣기로 삽입된 이미지는 파이썬 구조상 보존이 불가능합니다.)")
     
 st.write("") 
 
@@ -1347,7 +1328,8 @@ with col_center:
 
                         dest_wb.external_links = []
                         
-                        # [수정] 아무 이미지도 삭제하지 않게 해달라는 요청 반영: 이미지 보존, 필터링 삭제 로직 완전히 증발시킴!
+                        # [수정] 아무 이미지도 삭제하지 않도록 필터링 로직을 완벽하게 없앴습니다. 
+                        # 엑셀의 "떠다니는 이미지" 형태라면 100% 원본 그대로 유지됩니다.
 
                         for row in dest_ws.iter_rows():
                             for cell in row:
@@ -1777,22 +1759,30 @@ with col_center:
                             safe_write_force(dest_ws, 515, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 516, 2, env_val, center=False)
 
-                            # [수정] 15번 항목: 15sec 전체 내용 스캔 방식으로 완벽 개선 (절대 실패 불가 로직)
+                            # [수정] 15번 항목: HP(K) 모드에서 하드코딩 처리
                             s15 = parsed_data["sec15"]
                             full_text = s15.get("FULL_TEXT", "")
                             
                             # 공백, 특수문자 완벽 제거
                             clean_full = re.sub(r'[\s\-\,\.\:\(\)]+', '', full_text)
                             
-                            is_target = ("제4류인화성액체제3석유류비수용성액체지정수량2000리터" in clean_full) or \
-                                        ("4류제3석유류비수용성2000" in clean_full) or \
-                                        ("4류" in clean_full and "3석유류" in clean_full and "2000" in clean_full)
-                            
-                            if is_target:
-                                safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
+                            if option == "HP(K)":
+                                is_target = ("제4류인화성액체제3석유류비수용성액체지정수량2000리터" in clean_full) or \
+                                            ("4류제3석유류비수용성2000" in clean_full) or \
+                                            ("4류" in clean_full and "3석유류" in clean_full and "2000" in clean_full and "비수용성" in clean_full)
+                                
+                                if is_target:
+                                    safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
+                                else:
+                                    safe_write_force(dest_ws, 521, 2, "", center=False)
+                                    dest_ws.cell(row=521, column=2).fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
                             else:
-                                safe_write_force(dest_ws, 521, 2, "", center=False)
-                                dest_ws.cell(row=521, column=2).fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
+                                is_target = ("4류" in clean_full and "3석유류" in clean_full and "2000" in clean_full)
+                                if is_target:
+                                    safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
+                                else:
+                                    safe_write_force(dest_ws, 521, 2, "", center=False)
+                                    dest_ws.cell(row=521, column=2).fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
 
                             today_str = datetime.now().strftime("%Y.%m.%d")
                             safe_write_force(dest_ws, 542, 2, today_str, center=False)
