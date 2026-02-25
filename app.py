@@ -1119,10 +1119,8 @@ def parse_pdf_final(doc, mode="CFF(K)"):
         if end_15 == -1: end_15 = len(all_lines)
         sec15_lines = all_lines[start_15:end_15]
     
-    if mode == "HP(K)":
-        danger_act = extract_section_smart(sec15_lines, "라. 위험물안전관리법", ["마. 폐기물", "마.폐기물"], mode)
-    else:
-        danger_act = extract_section_smart(sec15_lines, "위험물안전관리법", ["마. 폐기물", "마.폐기물"], mode)
+    # [수정] 15번 항목 매칭을 위해 추출 시 '라.' 접두어 의존성 제거, 공통으로 '위험물안전관리법'부터 탐색
+    danger_act = extract_section_smart(sec15_lines, "위험물안전관리법", ["마. 폐기물", "마.폐기물"], mode)
     result["sec15"] = {"DANGER": danger_act}
 
     return result
@@ -1219,8 +1217,8 @@ with col_center:
                             df_kor = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_kor)
                             for _, row in df_kor.iterrows():
                                 if pd.notna(row.iloc[0]):
-                                    c = str(val_cas).replace(" ", "").strip()
-                                    n = str(val_name).strip() if pd.notna(val_name) else ""
+                                    c = str(row.iloc[0]).replace(" ", "").strip()
+                                    n = str(row.iloc[1]).strip() if len(row) > 1 and pd.notna(row.iloc[1]) else ""
                                     cas_name_map[c] = n
                                     if n:
                                         kor_data_map[n] = {
@@ -1240,8 +1238,8 @@ with col_center:
                             df_eng = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_eng)
                             for _, row in df_eng.iterrows():
                                 if pd.notna(row.iloc[0]):
-                                    c = str(val_cas).replace(" ", "").strip()
-                                    n = str(val_name).strip() if pd.notna(val_name) else ""
+                                    c = str(row.iloc[0]).replace(" ", "").strip()
+                                    n = str(row.iloc[1]).strip() if len(row) > 1 and pd.notna(row.iloc[1]) else ""
                                     cas_name_map[c] = n
                                     if n:
                                         eng_data_map[n] = {
@@ -1334,7 +1332,18 @@ with col_center:
                         dest_ws = dest_wb.active
 
                         dest_wb.external_links = []
-                        dest_ws._images = []
+                        
+                        # [수정] 상단 1~5행 부근에 있는 배너 이미지(row < 10)는 보존하고, 나머지(더미 그림문자 등)만 삭제
+                        images_to_keep = []
+                        for img in dest_ws._images:
+                            try:
+                                anchor_obj = getattr(img.anchor, '_from', img.anchor)
+                                r = getattr(anchor_obj, 'row', 999)
+                                if r < 10: 
+                                    images_to_keep.append(img)
+                            except:
+                                pass
+                        dest_ws._images = images_to_keep
 
                         for row in dest_ws.iter_rows():
                             for cell in row:
@@ -1764,7 +1773,7 @@ with col_center:
                             safe_write_force(dest_ws, 515, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 516, 2, env_val, center=False)
 
-                            # [수정] 15번 섹션: 핵심 키워드 매칭 방식으로 보완
+                            # [수정] 15번 섹션: 핵심 키워드 매칭 강력 보완
                             s15 = parsed_data["sec15"]
                             
                             danger_text = s15.get("DANGER", "").strip()
