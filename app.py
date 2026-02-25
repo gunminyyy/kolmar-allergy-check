@@ -1110,11 +1110,6 @@ def parse_pdf_final(doc, mode="CFF(K)"):
             "ENV": env_raw
         }
 
-    # [수정] 15. 법적규제 섹션의 내용 스캔. 만약의 사태를 대비하여 문서 전체 텍스트도 FULL_TEXT로 확보
-    result["sec15"] = {
-        "FULL_TEXT": "\n".join([l['text'] for l in all_lines])
-    }
-
     return result
 
 # --------------------------------------------------------------------------
@@ -1140,6 +1135,7 @@ refractive_index_input = ""
 if option in ["HP(K)", "HP(E)"]:
     refractive_index_input = st.text_input("굴절률 입력")
 
+# 셀 안에 그림 넣기로 인한 #VALUE 오류 안내문
 if option in ["CFF(K)", "HP(K)"]:
     st.info("※ 엑셀 템플릿의 상단 배너 이미지는 반드시 **'셀 위로 띄우기(떠다니는 이미지)'**로 삽입해 주세요. (셀 안에 넣기로 삽입된 이미지는 파이썬 구조상 보존이 불가능합니다.)")
     
@@ -1328,8 +1324,8 @@ with col_center:
 
                         dest_wb.external_links = []
                         
-                        # [수정] 아무 이미지도 삭제하지 않도록 필터링 로직을 완벽하게 없앴습니다. 
-                        # 엑셀의 "떠다니는 이미지" 형태라면 100% 원본 그대로 유지됩니다.
+                        # [수정: 배너 이미지 보존] 이미지 관련 코드를 일절 사용하지 않음으로써 양식 파일의 모든 이미지를 100% 무조건 보존합니다.
+                        # dest_ws._images 삭제나 필터링을 아예 하지 않습니다.
 
                         for row in dest_ws.iter_rows():
                             for cell in row:
@@ -1410,6 +1406,7 @@ with col_center:
                             fill_regulatory_section(dest_ws, 439, 478, active_substances, eng_data_map, 'U', mode=option)
                             fill_regulatory_section(dest_ws, 480, 519, active_substances, eng_data_map, 'V', mode=option)
 
+                            # [수정: HP(E) 굴절률 B189] 영문 양식에 맞게 B189 셀로 타겟팅 고정
                             if refractive_index_input:
                                 safe_write_force(dest_ws, 189, 2, f"{refractive_index_input.strip()} ± 0.005", center=False)
 
@@ -1440,6 +1437,7 @@ with col_center:
                             safe_write_force(dest_ws, 544, 1, f"16.2 Date of Issue : {today_eng}", center=False)
                             
                             collected_pil_images = []
+                            all_lines_for_img = get_clustered_lines(doc)
                             page = doc[0]
                             image_list = doc.get_page_images(0)
                             
@@ -1563,6 +1561,10 @@ with col_center:
                             fill_regulatory_section(dest_ws, 401, 437, active_substances, eng_data_map, 'T', mode=option)
                             fill_regulatory_section(dest_ws, 439, 478, active_substances, eng_data_map, 'U', mode=option)
                             fill_regulatory_section(dest_ws, 480, 519, active_substances, eng_data_map, 'V', mode=option)
+
+                            # [수정: CFF(E) 굴절률 B189] 영문 양식에 맞게 B189 셀로 타겟팅 고정
+                            if refractive_index_input:
+                                safe_write_force(dest_ws, 189, 2, f"{refractive_index_input.strip()} ± 0.005", center=False)
 
                             s14 = parsed_data["sec14"]
                             
@@ -1759,25 +1761,21 @@ with col_center:
                             safe_write_force(dest_ws, 515, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 516, 2, env_val, center=False)
 
-                            # [수정] 15번 항목: HP(K) 모드에서 하드코딩 처리
-                            s15 = parsed_data["sec15"]
-                            full_text = s15.get("FULL_TEXT", "")
-                            
-                            # 공백, 특수문자 완벽 제거
-                            clean_full = re.sub(r'[\s\-\,\.\:\(\)]+', '', full_text)
-                            
+                            # [수정: HP(K) B521 하드코딩] 
+                            # 대표님 요청에 따라 어떠한 조건 검사 없이 무조건 텍스트 삽입 후 빨간색 배경 지정
                             if option == "HP(K)":
-                                is_target = ("제4류인화성액체제3석유류비수용성액체지정수량2000리터" in clean_full) or \
-                                            ("4류제3석유류비수용성2000" in clean_full) or \
-                                            ("4류" in clean_full and "3석유류" in clean_full and "2000" in clean_full and "비수용성" in clean_full)
+                                safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
+                                dest_ws.cell(row=521, column=2).fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
+                            else: # CFF(K)
+                                s15 = parsed_data["sec15"]
+                                danger_text = s15.get("DANGER", "").strip()
+                                full_text = s15.get("FULL_TEXT", "")
+                                clean_danger = danger_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "").replace(".", "").replace(":", "")
+                                clean_full = full_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "").replace(".", "").replace(":", "")
                                 
-                                if is_target:
-                                    safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
-                                else:
-                                    safe_write_force(dest_ws, 521, 2, "", center=False)
-                                    dest_ws.cell(row=521, column=2).fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
-                            else:
-                                is_target = ("4류" in clean_full and "3석유류" in clean_full and "2000" in clean_full)
+                                is_target = ("4류" in clean_danger and "3석유류" in clean_danger and "2000" in clean_danger) or \
+                                            ("4류인화성액체" in clean_full and "3석유류" in clean_full and "2000" in clean_full)
+                                
                                 if is_target:
                                     safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
                                 else:
