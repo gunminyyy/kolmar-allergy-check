@@ -1110,13 +1110,13 @@ def parse_pdf_final(doc, mode="CFF(K)"):
             "ENV": env_raw
         }
 
-    # [수정] 15번 항목: 추출 실패 대비 전체 텍스트 검색 및 키워드 추출 무적 백업 로직
+    # [수정1] 15. 법적규제 섹션을 좀 더 유연하게 탐색하고 못 찾으면 전체 텍스트 백업 (B521 완벽 대응)
     sec15_lines = []
     start_15 = -1; end_15 = -1
     for i, line in enumerate(all_lines):
         clean_txt = line['text'].replace(" ", "")
-        if "15.법적규제" in clean_txt: start_15 = i
-        if "16.그밖의" in clean_txt: end_15 = i; break
+        if "15.법적" in clean_txt: start_15 = i
+        if "16.그밖의" in clean_txt or "16.기타" in clean_txt: end_15 = i; break
     
     if start_15 != -1:
         if end_15 == -1: end_15 = len(all_lines)
@@ -1130,7 +1130,7 @@ def parse_pdf_final(doc, mode="CFF(K)"):
 
     result["sec15"] = {
         "DANGER": danger_act_text,
-        "FULL_TEXT": "\n".join([l['text'] for l in all_lines])
+        "FULL_TEXT": "\n".join([l['text'] for l in sec15_lines])
     }
 
     return result
@@ -1299,6 +1299,8 @@ with col_center:
                         res = []
                         cas_regex = re.compile(r'(\d{2,7}\s*-\s*\d{2}\s*-\s*\d)')
                         for r in range(s_r, e_r + 1):
+                            if ws.row_dimensions[r].hidden: 
+                                continue
                             cas = ws.cell(row=r, column=cas_col).value
                             conc = ws.cell(row=r, column=conc_col).value
                             if cas and str(cas).strip():
@@ -1345,8 +1347,7 @@ with col_center:
 
                         dest_wb.external_links = []
                         
-                        # [수정] 양식 템플릿의 모든 이미지를 절대 삭제하지 않고 그대로 보존 (배너 유지 목적)
-                        # (수동으로 더미 이미지를 삭제하도록 처리)
+                        # [수정] 아무 이미지도 삭제하지 않게 해달라는 요청 반영: 이미지 보존, 필터링 삭제 로직 완전히 증발시킴!
 
                         for row in dest_ws.iter_rows():
                             for cell in row:
@@ -1776,37 +1777,22 @@ with col_center:
                             safe_write_force(dest_ws, 515, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 516, 2, env_val, center=False)
 
-                            # [수정] 15번 항목: 추출 실패 대비 전체 텍스트 검색 및 키워드 강력 매칭 (절대 실패 불가 로직)
+                            # [수정] 15번 항목: 15sec 전체 내용 스캔 방식으로 완벽 개선 (절대 실패 불가 로직)
                             s15 = parsed_data["sec15"]
+                            full_text = s15.get("FULL_TEXT", "")
                             
-                            danger_text = s15.get("DANGER", "").strip()
-                            if option == "HP(K)":
-                                danger_text = re.sub(r'^에\s*의한\s*규제\s*', '', danger_text)
-                                danger_text = re.sub(r'^[\s\-]+', '', danger_text).strip()
-                                
-                                full_text = s15.get("FULL_TEXT", "")
-                                clean_full = full_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "").replace(".", "").replace(":", "")
-                                
-                                is_target = ("4류" in clean_full and "3석유류" in clean_full and "2000" in clean_full)
-                                
-                                if is_target or ("4류" in danger_text and "3석유류" in danger_text and "2000" in danger_text):
-                                    safe_write_force(dest_ws, 521, 2, danger_text if danger_text and "2000" in danger_text else "위험물에 해당됨 : 제4류 인화성액체, 제3석유류 (비수용성액체) (지정수량 : 2,000리터)", center=False)
-                                else:
-                                    safe_write_force(dest_ws, 521, 2, "", center=False)
-                                    dest_ws.cell(row=521, column=2).fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
-                            else: # CFF(K)
-                                full_text = s15.get("FULL_TEXT", "")
-                                clean_danger = danger_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "").replace(".", "").replace(":", "")
-                                clean_full = full_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "").replace(".", "").replace(":", "")
-                                
-                                is_target = ("4류" in clean_danger and "3석유류" in clean_danger and "2000" in clean_danger) or \
-                                            ("4류인화성액체" in clean_full and "3석유류" in clean_full and "2000" in clean_full)
-                                
-                                if is_target:
-                                    safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
-                                else:
-                                    safe_write_force(dest_ws, 521, 2, "", center=False)
-                                    dest_ws.cell(row=521, column=2).fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
+                            # 공백, 특수문자 완벽 제거
+                            clean_full = re.sub(r'[\s\-\,\.\:\(\)]+', '', full_text)
+                            
+                            is_target = ("제4류인화성액체제3석유류비수용성액체지정수량2000리터" in clean_full) or \
+                                        ("4류제3석유류비수용성2000" in clean_full) or \
+                                        ("4류" in clean_full and "3석유류" in clean_full and "2000" in clean_full)
+                            
+                            if is_target:
+                                safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
+                            else:
+                                safe_write_force(dest_ws, 521, 2, "", center=False)
+                                dest_ws.cell(row=521, column=2).fill = PatternFill(start_color="FFFF0000", end_color="FFFF0000", fill_type="solid")
 
                             today_str = datetime.now().strftime("%Y.%m.%d")
                             safe_write_force(dest_ws, 542, 2, today_str, center=False)
