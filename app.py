@@ -188,7 +188,8 @@ def fill_fixed_range(ws, start_row, end_row, codes, code_map, mode="CFF(K)"):
                 ws.row_dimensions[current_row].hidden = False
                 safe_write_force(ws, current_row, 2, "")
                 safe_write_force(ws, current_row, 4, "자료없음", center=False)
-            elif "E" in mode and current_row in [24, 38, 50, 64, 70]:
+            # [수정] 24와 25를 모두 포함시켜 HP(E)의 H-코드 시작점(25) 대응
+            elif "E" in mode and current_row in [24, 25, 38, 50, 64, 70]:
                 ws.row_dimensions[current_row].hidden = False
                 safe_write_force(ws, current_row, 2, "")
                 safe_write_force(ws, current_row, 4, "no data available", center=False)
@@ -1110,26 +1111,8 @@ def parse_pdf_final(doc, mode="CFF(K)"):
             "ENV": env_raw
         }
 
-    # [수정] 15. 법적규제 섹션 탐색을 더 확실하게 보완 (추출 실패 방지용 무적 백업 로직 적용)
-    sec15_lines = []
-    start_15 = -1; end_15 = -1
-    for i, line in enumerate(all_lines):
-        clean_txt = line['text'].replace(" ", "")
-        if "15.법적규제" in clean_txt: start_15 = i
-        if "16.그밖의" in clean_txt: end_15 = i; break
-    
-    if start_15 != -1:
-        if end_15 == -1: end_15 = len(all_lines)
-        sec15_lines = all_lines[start_15:end_15]
-    else:
-        sec15_lines = all_lines
-        
-    danger_act = extract_section_smart(sec15_lines, "위험물안전관리법", ["마. 폐기물", "마.폐기물"], mode)
-    
-    result["sec15"] = {
-        "DANGER": danger_act,
-        "FULL_TEXT": "\n".join([l['text'] for l in all_lines])
-    }
+    # [수정] 15. 법적규제 섹션 탐색을 아예 전체 텍스트 기반으로 100% 찾게 수정
+    result["sec15"] = {"FULL_TEXT": "\n".join([l['text'] for l in all_lines])}
 
     return result
 
@@ -1155,6 +1138,10 @@ option = st.selectbox("적용할 양식", ("CFF(K)", "CFF(E)", "HP(K)", "HP(E)")
 refractive_index_input = ""
 if option in ["HP(K)", "HP(E)"]:
     refractive_index_input = st.text_input("굴절률 입력")
+
+# 셀 안에 그림 넣기로 인한 #VALUE 오류 안내문
+if option in ["CFF(K)", "HP(K)"]:
+    st.info("※ 엑셀 템플릿의 상단 배너 이미지는 반드시 **'셀 위로 띄우기(떠다니는 이미지)'**로 삽입해 주세요. '셀 안에 넣기' 기능은 변환 시 오류(#VALUE!)를 발생시킵니다.")
     
 st.write("") 
 
@@ -1293,8 +1280,7 @@ with col_center:
                         res = []
                         cas_regex = re.compile(r'(\d{2,7}\s*-\s*\d{2}\s*-\s*\d)')
                         for r in range(s_r, e_r + 1):
-                            if ws.row_dimensions[r].hidden: 
-                                continue
+                            # [수정] 성분 부분은 숨김처리(hidden) 여부와 상관없이 무조건 추출하도록 족쇄 해제
                             cas = ws.cell(row=r, column=cas_col).value
                             conc = ws.cell(row=r, column=conc_col).value
                             if cas and str(cas).strip():
@@ -1341,32 +1327,28 @@ with col_center:
 
                         dest_wb.external_links = []
                         
-                        # [수정] A열(c=1)에 위치한 상단 배너 이미지는 100% 보존하고 B열(c=2) 15~35행의 더미 신호어 그림만 삭제
+                        # [수정] 행 번호를 기반으로 한 지능형 이미지 보존 로직
+                        # 15행~35행(더미 신호어 그림문자 위치) 사이에 있는 이미지만 타겟팅하여 삭제하고 나머지는 모두 보존!
                         images_to_keep = []
                         for img in dest_ws._images:
                             is_dummy = False
                             try:
                                 r = -1
-                                c = -1
                                 if isinstance(img.anchor, str):
                                     m_r = re.search(r'\d+', img.anchor)
                                     if m_r: r = int(m_r.group())
-                                    if 'B' in img.anchor.upper(): c = 2
                                 else:
                                     if hasattr(img.anchor, '_from'):
                                         r = img.anchor._from.row + 1
-                                        c = img.anchor._from.col + 1
                                     elif hasattr(img.anchor, 'from_'):
                                         r = img.anchor.from_.row + 1
-                                        c = img.anchor.from_.col + 1
                                 
-                                # B열(c=2)에 위치하고 15행~35행 사이에 있는 그림만 더미 그림으로 간주하여 삭제
-                                if 15 <= r <= 35 and c == 2:
+                                # 15~35행 사이에 있는 그림만 지우기
+                                if 15 <= r <= 35:
                                     is_dummy = True
                             except:
                                 pass
                             
-                            # 더미가 아닌 이미지(A열 배너 등)는 무조건 보존
                             if not is_dummy:
                                 images_to_keep.append(img)
                                 
@@ -1390,10 +1372,11 @@ with col_center:
                                 safe_write_force(dest_ws, 19, 2, clean_cls, center=False)
                                 dest_ws.row_dimensions[19].height = len(parsed_data["hazard_cls"]) * 14.0
                             
+                            # [수정] HP(E)도 HP(K)처럼 H/P 코드 위치를 1칸씩 밀어서 25부터 맞춤
                             if parsed_data["signal_word"]:
-                                safe_write_force(dest_ws, 23, 2, parsed_data["signal_word"], center=False)
+                                safe_write_force(dest_ws, 24, 2, parsed_data["signal_word"], center=False)
 
-                            fill_fixed_range(dest_ws, 24, 36, parsed_data["h_codes"], code_map, mode=option)
+                            fill_fixed_range(dest_ws, 25, 36, parsed_data["h_codes"], code_map, mode=option)
                             fill_fixed_range(dest_ws, 38, 49, parsed_data["p_prev"], code_map, mode=option)
                             fill_fixed_range(dest_ws, 50, 63, parsed_data["p_resp"], code_map, mode=option)
                             fill_fixed_range(dest_ws, 64, 69, parsed_data["p_stor"], code_map, mode=option)
@@ -1520,7 +1503,7 @@ with col_center:
                                 img_byte_arr = io.BytesIO()
                                 merged_img.save(img_byte_arr, format='PNG')
                                 img_byte_arr.seek(0)
-                                dest_ws.add_image(XLImage(img_byte_arr), 'B22') 
+                                dest_ws.add_image(XLImage(img_byte_arr), 'B23') 
 
                         elif option == "CFF(E)":
                             dest_ws['A50'].alignment = ALIGN_LEFT
@@ -1628,7 +1611,7 @@ with col_center:
                             safe_write_force(dest_ws, 534, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 535, 2, env_val, center=False)
 
-                            today_eng = datetime.now().strftime("%d. %b. %Y")
+                            today_eng = datetime.now().strftime("%d. %b. %Y").upper()
                             safe_write_force(dest_ws, 544, 1, f"16.2 Date of Issue : {today_eng}", center=False)
                             
                             collected_pil_images = []
@@ -1800,19 +1783,17 @@ with col_center:
                             safe_write_force(dest_ws, 515, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 516, 2, env_val, center=False)
 
-                            # [수정] 15번 항목: 추출 실패 대비 전체 텍스트 검색 및 키워드 강력 매칭 (절대 실패 불가 로직)
+                            # [수정] 15번 항목: 무조건 문서 전체(FULL_TEXT)에서 키워드를 싹쓸이하여 스캔하는 가장 확실한 로직
                             s15 = parsed_data["sec15"]
                             
                             danger_text = s15.get("DANGER", "").strip()
                             full_text = s15.get("FULL_TEXT", "")
                             
-                            idx = full_text.find("위험물안전관리법")
-                            if idx != -1:
-                                danger_text += " " + full_text[idx:idx+300] 
-                                
                             clean_danger = danger_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "").replace(".", "").replace(":", "")
+                            clean_full = full_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "").replace(".", "").replace(":", "")
                             
-                            is_target = ("4류" in clean_danger and "3석유류" in clean_danger and "2000" in clean_danger)
+                            is_target = ("4류" in clean_danger and "3석유류" in clean_danger and "2000" in clean_danger) or \
+                                        ("4류인화성액체" in clean_full and "3석유류" in clean_full and "2000" in clean_full)
                             
                             if option in ["CFF(K)", "HP(K)"] and is_target:
                                 safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
@@ -1866,7 +1847,7 @@ with col_center:
                                 img_byte_arr = io.BytesIO()
                                 merged_img.save(img_byte_arr, format='PNG')
                                 img_byte_arr.seek(0)
-                                dest_ws.add_image(XLImage(img_byte_arr), 'B22') 
+                                dest_ws.add_image(XLImage(img_byte_arr), 'B23' if option in ["HP(K)", "CFF(K)"] else 'B22') 
 
                         dest_wb.external_links = []
                         output = io.BytesIO()
