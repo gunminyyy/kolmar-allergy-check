@@ -1119,7 +1119,7 @@ def parse_pdf_final(doc, mode="CFF(K)"):
         if end_15 == -1: end_15 = len(all_lines)
         sec15_lines = all_lines[start_15:end_15]
     
-    # [수정] 15번 항목 매칭을 위해 추출 시 '라.' 접두어 의존성 제거, 공통으로 '위험물안전관리법'부터 탐색
+    # [수정] HP(K) 모드에서 PDF 추출 의존성을 완벽히 제거하기 위해 시작 키워드를 "위험물안전관리법"으로 통일
     danger_act = extract_section_smart(sec15_lines, "위험물안전관리법", ["마. 폐기물", "마.폐기물"], mode)
     result["sec15"] = {"DANGER": danger_act}
 
@@ -1218,7 +1218,7 @@ with col_center:
                             for _, row in df_kor.iterrows():
                                 if pd.notna(row.iloc[0]):
                                     c = str(row.iloc[0]).replace(" ", "").strip()
-                                    n = str(row.iloc[1]).strip() if len(row) > 1 and pd.notna(row.iloc[1]) else ""
+                                    n = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ""
                                     cas_name_map[c] = n
                                     if n:
                                         kor_data_map[n] = {
@@ -1239,7 +1239,7 @@ with col_center:
                             for _, row in df_eng.iterrows():
                                 if pd.notna(row.iloc[0]):
                                     c = str(row.iloc[0]).replace(" ", "").strip()
-                                    n = str(row.iloc[1]).strip() if len(row) > 1 and pd.notna(row.iloc[1]) else ""
+                                    n = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ""
                                     cas_name_map[c] = n
                                     if n:
                                         eng_data_map[n] = {
@@ -1333,16 +1333,19 @@ with col_center:
 
                         dest_wb.external_links = []
                         
-                        # [수정] 상단 1~5행 부근에 있는 배너 이미지(row < 10)는 보존하고, 나머지(더미 그림문자 등)만 삭제
+                        # [수정] 상단 배너 이미지 보존 로직 (가로가 세로보다 3배 이상 큰 이미지는 배너로 간주)
                         images_to_keep = []
                         for img in dest_ws._images:
                             try:
-                                anchor_obj = getattr(img.anchor, '_from', img.anchor)
-                                r = getattr(anchor_obj, 'row', 999)
-                                if r < 10: 
+                                if getattr(img, 'width', 0) > getattr(img, 'height', 0) * 3:
                                     images_to_keep.append(img)
                             except:
                                 pass
+                        
+                        # 안전장치: 조건에 맞는 배너를 찾지 못했더라도 무조건 첫 번째 이미지는 보존
+                        if not images_to_keep and dest_ws._images:
+                            images_to_keep.append(dest_ws._images[0])
+                            
                         dest_ws._images = images_to_keep
 
                         for row in dest_ws.iter_rows():
@@ -1773,9 +1776,9 @@ with col_center:
                             safe_write_force(dest_ws, 515, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 516, 2, env_val, center=False)
 
-                            # [수정] 15번 섹션: 핵심 키워드 매칭 강력 보완
                             s15 = parsed_data["sec15"]
                             
+                            # [수정] 15번 항목: 핵심 키워드("4류", "3석유류", "2000")를 모든 불순물 무시하고 안전하게 매칭
                             danger_text = s15.get("DANGER", "").strip()
                             clean_danger = danger_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "")
                             
