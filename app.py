@@ -1218,9 +1218,7 @@ with col_center:
                         if sheet_kor:
                             df_kor = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_kor)
                             for _, row in df_kor.iterrows():
-                                val_cas = row.iloc[0]
-                                val_name = row.iloc[1]
-                                if pd.notna(val_cas):
+                                if pd.notna(row.iloc[0]):
                                     c = str(val_cas).replace(" ", "").strip()
                                     n = str(val_name).strip() if pd.notna(val_name) else ""
                                     cas_name_map[c] = n
@@ -1241,9 +1239,7 @@ with col_center:
                         if sheet_eng:
                             df_eng = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_eng)
                             for _, row in df_eng.iterrows():
-                                val_cas = row.iloc[0]
-                                val_name = row.iloc[1]
-                                if pd.notna(val_cas):
+                                if pd.notna(row.iloc[0]):
                                     c = str(val_cas).replace(" ", "").strip()
                                     n = str(val_name).strip() if pd.notna(val_name) else ""
                                     cas_name_map[c] = n
@@ -1768,16 +1764,15 @@ with col_center:
                             safe_write_force(dest_ws, 515, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 516, 2, env_val, center=False)
 
+                            # [수정] 15번 섹션: 핵심 키워드 매칭 방식으로 보완
                             s15 = parsed_data["sec15"]
                             
                             danger_text = s15.get("DANGER", "").strip()
-                            clean_danger = danger_text.replace("-", "").replace(" ", "").replace("\n", "")
-                            target_cff = "4류 제3석유류(비수용성) 2,000L".replace("-", "").replace(" ", "")
-                            target_hp = "위험물에 해당됨 : 제4류 인화성액체, 제3석유류 (비수용성액체) (지정수량 : 2,000리터)".replace("-", "").replace(" ", "")
+                            clean_danger = danger_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "")
                             
-                            if option == "CFF(K)" and clean_danger == target_cff:
-                                safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
-                            elif option == "HP(K)" and clean_danger == target_hp:
+                            is_target = ("4류" in clean_danger and "3석유류" in clean_danger and "2000" in clean_danger)
+                            
+                            if option in ["CFF(K)", "HP(K)"] and is_target:
                                 safe_write_force(dest_ws, 521, 2, "4류 제3석유류(비수용성) 2,000L", center=False)
                             else:
                                 safe_write_force(dest_ws, 521, 2, "", center=False)
@@ -1829,7 +1824,8 @@ with col_center:
                                 img_byte_arr = io.BytesIO()
                                 merged_img.save(img_byte_arr, format='PNG')
                                 img_byte_arr.seek(0)
-                                dest_ws.add_image(XLImage(img_byte_arr), 'B22') 
+                                # CFF(E)는 B22, 나머지는 B23
+                                dest_ws.add_image(XLImage(img_byte_arr), 'B22' if option=="CFF(E)" else 'B23') 
 
                         dest_wb.external_links = []
                         output = io.BytesIO()
