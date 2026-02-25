@@ -99,41 +99,76 @@ def extract_data(file_raw, is_23=False, is_83=False):
     
     if val_a1 == "성분코드" and val_b1 == "성분국문명":
         product_name = file_raw.name
-        # 수정됨: 최대 행까지 자동으로 찾아서 추출
+        empty_count = 0
         for r in range(2, ws.max_row + 1):
-            c, v = get_cas_set(ws.cell(row=r, column=6).value), clean_val(ws.cell(row=r, column=8).value)
+            cas_raw = ws.cell(row=r, column=6).value
+            if cas_raw is None or str(cas_raw).strip() == "":
+                empty_count += 1
+                if empty_count >= 10: break
+            else:
+                empty_count = 0
+            
+            c, v = get_cas_set(cas_raw), clean_val(ws.cell(row=r, column=8).value)
             if c and v != 0: 
                 data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": v}
     elif is_83:
         product_name = ws.cell(row=10, column=2).value
-        # 수정됨: 최대 행까지 자동으로 찾아서 추출
+        empty_count = 0
         for r in range(1, ws.max_row + 1):
-            c, v = get_cas_set(ws.cell(row=r, column=2).value), clean_val(ws.cell(row=r, column=3).value)
+            cas_raw = ws.cell(row=r, column=2).value
+            if cas_raw is None or str(cas_raw).strip() == "":
+                empty_count += 1
+                if empty_count >= 10: break
+            else:
+                empty_count = 0
+
+            c, v = get_cas_set(cas_raw), clean_val(ws.cell(row=r, column=3).value)
             if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": v}
     elif is_23:
         product_name = ws.cell(row=12, column=2).value
-        # 26알러지 양식은 수정하지 않음 (기존 18~43행 유지)
+        # 26알러지 양식은 제외 (기존 지정 범위 유지)
         for r in range(18, 44):
             c, v = get_cas_set(ws.cell(row=r, column=2).value), clean_val(ws.cell(row=r, column=3).value)
             if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value or "지정성분", "v": v}
     else:
         if "HPD" in name_upper:
             product_name = ws.cell(row=10, column=3).value
-            # 수정됨: 최대 행까지 자동으로 찾아서 추출
+            empty_count = 0
             for r in range(17, ws.max_row + 1):
-                c, v = get_cas_set(ws.cell(row=r, column=3).value), clean_val(ws.cell(row=r, column=6).value)
+                cas_raw = ws.cell(row=r, column=3).value
+                if cas_raw is None or str(cas_raw).strip() == "":
+                    empty_count += 1
+                    if empty_count >= 10: break
+                else:
+                    empty_count = 0
+                    
+                c, v = get_cas_set(cas_raw), clean_val(ws.cell(row=r, column=6).value)
                 if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": v}
         elif "HP" in name_upper:
             product_name = ws.cell(row=10, column=2).value
-            # 수정됨: 최대 행까지 자동으로 찾아서 추출
+            empty_count = 0
             for r in range(1, ws.max_row + 1):
-                c, v = get_cas_set(ws.cell(row=r, column=2).value), clean_val(ws.cell(row=r, column=3).value)
+                cas_raw = ws.cell(row=r, column=2).value
+                if cas_raw is None or str(cas_raw).strip() == "":
+                    empty_count += 1
+                    if empty_count >= 10: break
+                else:
+                    empty_count = 0
+
+                c, v = get_cas_set(cas_raw), clean_val(ws.cell(row=r, column=3).value)
                 if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": v}
         else:
             product_name = ws.cell(row=7, column=4).value
-            # 수정됨: 최대 행까지 자동으로 찾아서 추출
+            empty_count = 0
             for r in range(13, ws.max_row + 1):
-                c, v = get_cas_set(ws.cell(row=r, column=6).value), clean_val(ws.cell(row=r, column=12).value)
+                cas_raw = ws.cell(row=r, column=6).value
+                if cas_raw is None or str(cas_raw).strip() == "":
+                    empty_count += 1
+                    if empty_count >= 10: break
+                else:
+                    empty_count = 0
+
+                c, v = get_cas_set(cas_raw), clean_val(ws.cell(row=r, column=12).value)
                 if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=2).value, "v": v}
     
     wb.close()
