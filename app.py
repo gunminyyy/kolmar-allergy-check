@@ -1110,18 +1110,22 @@ def parse_pdf_final(doc, mode="CFF(K)"):
             "ENV": env_raw
         }
 
+    # [수정] 15. 법적규제 섹션 탐색을 더 확실하게 보완 (띄어쓰기 무시)
     sec15_lines = []
     start_15 = -1; end_15 = -1
     for i, line in enumerate(all_lines):
-        if "15. 법적규제" in line['text']: start_15 = i
-        if "16. 그 밖의" in line['text']: end_15 = i; break
+        clean_txt = line['text'].replace(" ", "")
+        if "15.법적규제" in clean_txt: start_15 = i
+        if "16.그밖의" in clean_txt: end_15 = i; break
     if start_15 != -1:
         if end_15 == -1: end_15 = len(all_lines)
         sec15_lines = all_lines[start_15:end_15]
     
-    # [수정] 추출 함수가 실패해도 찾을 수 있도록 15번 섹션의 모든 줄을 강제로 통째로 백업
     sec15_full_text = "\n".join([l['text'] for l in sec15_lines])
-    
+    if not sec15_full_text:
+        sec15_full_text = "\n".join([l['text'] for l in all_lines]) # 15번 섹션을 못 찾았을 경우 문서 전체 강제 백업
+        
+    # '라.' 접두사 등 PDF 변수에 의존하지 않고 "위험물안전관리법" 단어 자체로 무조건 찾기
     danger_act = extract_section_smart(sec15_lines, "위험물안전관리법", ["마. 폐기물", "마.폐기물"], mode)
     
     result["sec15"] = {
@@ -1339,22 +1343,14 @@ with col_center:
 
                         dest_wb.external_links = []
                         
-                        # [수정] 신호어 구역(15~35행)에 있는 더미 그림문자만 삭제하고 상단 배너 등 모든 다른 이미지는 완벽 보존
+                        # [수정] 크기나 비율이 아니라 "시트에서 차지하는 가장 넓은 이미지 1개"를 무조건 배너로 취급하여 보존
                         images_to_keep = []
-                        for img in dest_ws._images:
+                        if dest_ws._images:
                             try:
-                                r = None
-                                if hasattr(img, 'anchor') and img.anchor is not None:
-                                    if hasattr(img.anchor, '_from'):
-                                        r = img.anchor._from.row
-                                    elif hasattr(img.anchor, 'from'):
-                                        r = getattr(img.anchor, 'from').row
-                                
-                                if r is not None and 15 <= r <= 35:
-                                    continue
-                                images_to_keep.append(img)
+                                widest_img = max(dest_ws._images, key=lambda img: getattr(img, 'width', 0))
+                                images_to_keep.append(widest_img)
                             except:
-                                images_to_keep.append(img)
+                                images_to_keep.append(dest_ws._images[0])
                                 
                         dest_ws._images = images_to_keep
 
@@ -1465,7 +1461,7 @@ with col_center:
 
                             today_eng = datetime.now().strftime("%d. %b. %Y").upper()
                             safe_write_force(dest_ws, 544, 1, f"16.2 Date of Issue : {today_eng}", center=False)
-
+                            
                             collected_pil_images = []
                             page = doc[0]
                             image_list = doc.get_page_images(0)
@@ -1786,14 +1782,14 @@ with col_center:
                             safe_write_force(dest_ws, 515, 2, pg_val, center=False)
                             safe_write_force(dest_ws, 516, 2, env_val, center=False)
 
+                            # [수정] 추출 함수가 놓쳤을 때를 대비해 전체 텍스트에서 안전하게 키워드 매칭 백업 적용
                             s15 = parsed_data["sec15"]
                             
-                            # [수정] 추출 함수가 놓쳤을 때를 대비해 전체 텍스트에서 안전하게 키워드 매칭 백업
                             danger_text = s15.get("DANGER", "").strip()
                             if not danger_text:
                                 danger_text = s15.get("FULL_TEXT", "")
                                 
-                            clean_danger = danger_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "")
+                            clean_danger = danger_text.replace(" ", "").replace("\n", "").replace("-", "").replace(",", "").replace(".", "").replace(":", "")
                             
                             is_target = ("4류" in clean_danger and "3석유류" in clean_danger and "2000" in clean_danger)
                             
@@ -1849,8 +1845,7 @@ with col_center:
                                 img_byte_arr = io.BytesIO()
                                 merged_img.save(img_byte_arr, format='PNG')
                                 img_byte_arr.seek(0)
-                                # CFF(E)는 B22, 나머지는 B23
-                                dest_ws.add_image(XLImage(img_byte_arr), 'B22' if option=="CFF(E)" else 'B23') 
+                                dest_ws.add_image(XLImage(img_byte_arr), 'B22') 
 
                         dest_wb.external_links = []
                         output = io.BytesIO()
