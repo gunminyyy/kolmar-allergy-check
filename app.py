@@ -14,7 +14,15 @@ st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 st.markdown("""
     <style>
     [data-testid="stFileUploader"] { width: 100%; }
-    [data-testid="stFileUploaderDropzone"] { padding: 1rem; min-height: 150px; }
+    /* 수직 가운데 정렬(justify-content: center; align-items: center) 속성 추가 */
+    [data-testid="stFileUploaderDropzone"] { 
+        padding: 1rem; 
+        min-height: 150px; 
+        display: flex; 
+        flex-direction: column; 
+        justify-content: center; 
+        align-items: center; 
+    }
     /* 기본 업로더 아래에 생기는 지저분한 파일 목록을 숨깁니다 */
     [data-testid="stFileUploaderFileName"] { display: none; }
     [data-testid="stFileUploaderFileData"] { display: none; }
@@ -115,14 +123,22 @@ def extract_data(file_raw, is_23=False, is_83=False):
         product_name = ws.cell(row=10, column=2).value
         empty_count = 0
         for r in range(1, ws.max_row + 1):
-            cas_raw = ws.cell(row=r, column=2).value
-            if cas_raw is None or str(cas_raw).strip() == "":
+            cas_raw_b = ws.cell(row=r, column=2).value
+            cas_raw_c = ws.cell(row=r, column=3).value
+            
+            if (cas_raw_b is None or str(cas_raw_b).strip() == "") and (cas_raw_c is None or str(cas_raw_c).strip() == ""):
                 empty_count += 1
                 if empty_count >= 10: break
             else:
                 empty_count = 0
 
-            c, v = get_cas_set(cas_raw), clean_val(ws.cell(row=r, column=3).value)
+            c_b = get_cas_set(cas_raw_b)
+            c_c = get_cas_set(cas_raw_c)
+            c = c_b if c_b else c_c
+            
+            v_val = ws.cell(row=r, column=4).value if (not c_b and c_c) else ws.cell(row=r, column=3).value
+            v = clean_val(v_val)
+
             if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": v}
     elif is_23:
         product_name = ws.cell(row=12, column=2).value
@@ -148,14 +164,22 @@ def extract_data(file_raw, is_23=False, is_83=False):
             product_name = ws.cell(row=10, column=2).value
             empty_count = 0
             for r in range(1, ws.max_row + 1):
-                cas_raw = ws.cell(row=r, column=2).value
-                if cas_raw is None or str(cas_raw).strip() == "":
+                cas_raw_b = ws.cell(row=r, column=2).value
+                cas_raw_c = ws.cell(row=r, column=3).value
+                
+                if (cas_raw_b is None or str(cas_raw_b).strip() == "") and (cas_raw_c is None or str(cas_raw_c).strip() == ""):
                     empty_count += 1
                     if empty_count >= 10: break
                 else:
                     empty_count = 0
 
-                c, v = get_cas_set(cas_raw), clean_val(ws.cell(row=r, column=3).value)
+                c_b = get_cas_set(cas_raw_b)
+                c_c = get_cas_set(cas_raw_c)
+                c = c_b if c_b else c_c
+                
+                v_val = ws.cell(row=r, column=4).value if (not c_b and c_c) else ws.cell(row=r, column=3).value
+                v = clean_val(v_val)
+
                 if c and v != 0: data_map[c] = {"n": ws.cell(row=r, column=1).value, "v": v}
         else:
             product_name = ws.cell(row=7, column=4).value
