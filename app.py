@@ -14,14 +14,14 @@ st.set_page_config(page_title="알러지 자료 통합 검토", layout="wide")
 st.markdown("""
     <style>
     [data-testid="stFileUploader"] { width: 100%; }
-    /* 수직 가운데 정렬(justify-content: center; align-items: center) 속성 추가 */
+    /* 수평(x축) 왼쪽, 수직(y축) 가운데 정렬 속성 변경 */
     [data-testid="stFileUploaderDropzone"] { 
         padding: 1rem; 
         min-height: 150px; 
         display: flex; 
         flex-direction: column; 
         justify-content: center; 
-        align-items: center; 
+        align-items: flex-start; 
     }
     /* 기본 업로더 아래에 생기는 지저분한 파일 목록을 숨깁니다 */
     [data-testid="stFileUploaderFileName"] { display: none; }
